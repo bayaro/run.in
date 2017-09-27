@@ -6,8 +6,8 @@ echo ">>>>>> $@"
 HOSTS=`aws --output text --profile $PROFILE --region eu-west-1 ec2 describe-instances \
     --query 'Reservations[*].Instances[*].[PrivateIpAddress,NetworkInterfaces[*].PrivateIpAddresses,Tags,State.Name,Platform]'`
     #--instance-ids i-092ad220bf866af12 \
-#echo "$HOSTS\n=="
-HOSTS=`echo "$HOSTS" | grep -E '^(Env|Name|True\s|10\.10\d\.\d*\.\d)'`
+#echo "$HOSTS\n==" ; exit
+HOSTS=`echo "$HOSTS" | grep -E '^(Env|Name|True\s|10\.10\d\.\d*\.\d|None)'`
 #echo "$HOSTS\n=="
 HOSTS=`echo "$HOSTS" | awk '{
         split($0,a," ");
