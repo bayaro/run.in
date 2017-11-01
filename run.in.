@@ -1,5 +1,10 @@
 #!/bin/sh
 
+if [ "x$1" = "x-y" ]; then
+    YES=1
+    shift
+fi
+
 PROFILE=`basename $0 | sed -E 's/run.in.(.*).sh/\1/'`
 echo ">>>>>> $@"
 
@@ -70,7 +75,11 @@ for h in $HOSTS; do
         fi
 
         echo "Continue? [y/N]"
-        read y
+        if [ "$YES" = "1" ]; then
+            y=y
+        else
+            read y
+        fi
         if [ "x$y" != "xy" ]; then
             echo "ABORTED"
             exit 1
