@@ -1,9 +1,17 @@
 #!/bin/sh
 
-if [ "x$1" = "x-y" ]; then
-    YES=1
+while true; do
+    case "x$1" in
+        "x-y") YES=1
+            ;;
+        "x-g") PATTERN=$2
+            shift
+            ;;
+        *) break
+            ;;
+    esac
     shift
-fi
+done
 
 PROFILE=`basename $0 | sed -E 's/run.in.(.*).sh/\1/'`
 echo ">>>>>> $@"
@@ -42,9 +50,16 @@ HOSTS=`echo "$HOSTS" | awk '{
     }' | sort -g`
 HOSTS=`echo "$HOSTS" | sed 's/##,/##/g'`
 #echo "$HOSTS=="
+if [ ! -z "$PATTERN" ]; then
+    HOSTS=`echo "$HOSTS" | grep "$PATTERN"`
+    if [ "x$HOSTS" == "x" ]; then
+        echo "There are no hosts that contains '$PATTERN' in its description"
+        exit 1
+    fi
+fi
 
 if [ -z "$2" ] && [ "x$@" = "x" ]; then
-    echo "$HOSTS" | sed 's/##/ /g' | sort -k 1 | awk -F ' ' '{printf "===> %-15s %20s %s: %s (%s %s %s) %s\n",$3,$6,$1,$2,$4,$5,$6,$7}'
+    echo "$HOSTS" | sed 's/##/ /g' | sort -k 1 | awk -F ' ' '{printf "===> %-15s %20s %s: %s (%s %s) %s\n",$3,$6,$1,$2,$4,$5,$7}' | grep --colour "$PATTERN"
     exit 0
 fi
 
@@ -53,12 +68,12 @@ add_key() {
 }
 
 for h in $HOSTS; do
+    echo $h | sed 's/##/ /g' | awk -F ' ' '{printf "===> %-15s %20s %s: %s (%s %s) %s\n",$3,$6,$1,$2,$4,$5,$7}' | grep --colour "$PATTERN"
     state=`echo $h | awk -F '##' '{print $4}'`
     if [ "$state" != "running" ]; then continue; fi
     platform=`echo $h | awk -F '##' '{print $5}'`
     if [ "$platform" != "-" ]; then continue; fi
 
-    echo $h | sed 's/##/ /g' | awk '{printf "\n===> %-15s %s: %s",$3,$1,$2}'
     env=`echo $h | awk -F '##' '{print $1}'`
     name=`echo $h | awk -F '##' '{print $2}'`
     ip=`echo $h | awk -F '##' '{print $3}'`
