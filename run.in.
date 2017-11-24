@@ -51,7 +51,7 @@ HOSTS=`echo "$HOSTS" | awk '{
 HOSTS=`echo "$HOSTS" | sed 's/##,/##/g'`
 #echo "$HOSTS=="
 if [ ! -z "$PATTERN" ]; then
-    HOSTS=`echo "$HOSTS" | grep "$PATTERN"`
+    HOSTS=`echo "$HOSTS" | grep -E "$PATTERN"`
     if [ "x$HOSTS" == "x" ]; then
         echo "There are no hosts that contains '$PATTERN' in its description"
         exit 1
@@ -59,7 +59,7 @@ if [ ! -z "$PATTERN" ]; then
 fi
 
 if [ -z "$2" ] && [ "x$@" = "x" ]; then
-    echo "$HOSTS" | sed 's/##/ /g' | sort -k 1 | awk -F ' ' '{printf "===> %-15s %20s %s: %s (%s %s) %s\n",$3,$6,$1,$2,$4,$5,$7}' | grep --colour "$PATTERN"
+    echo "$HOSTS" | sed 's/##/ /g' | sort -k 1 | awk -F ' ' '{printf "===> %-15s %20s %s: %s (%s %s) %s\n",$3,$6,$1,$2,$4,$5,$7}' | grep --colour -E "$PATTERN"
     exit 0
 fi
 
@@ -68,7 +68,7 @@ add_key() {
 }
 
 for h in $HOSTS; do
-    echo $h | sed 's/##/ /g' | awk -F ' ' '{printf "===> %-15s %20s %s: %s (%s %s) %s\n",$3,$6,$1,$2,$4,$5,$7}' | grep --colour "$PATTERN"
+    echo $h | sed 's/##/ /g' | awk -F ' ' '{printf "===> %-15s %20s %s: %s (%s %s) %s\n",$3,$6,$1,$2,$4,$5,$7}' | grep --colour -E "$PATTERN"
     state=`echo $h | awk -F '##' '{print $4}'`
     if [ "$state" != "running" ]; then continue; fi
     platform=`echo $h | awk -F '##' '{print $5}'`
