@@ -17,21 +17,16 @@ PROFILE=`basename $0 | sed -E 's/run.in.(.*).sh/\1/'`
 echo ">>>>>> $@"
 
 HOSTS=`aws --output text --profile $PROFILE --region eu-west-1 ec2 describe-instances \
-    --query 'Reservations[*].[Instances[*].[PrivateIpAddress,NetworkInterfaces[*].PrivateIpAddresses,Tags,State.Name,Platform],Instances[*].InstanceId]'`
-    #--instance-ids i-092ad220bf866af12 \
+    --query 'Reservations[*].Instances[*].[PrivateIpAddress,NetworkInterfaces[*].PrivateIpAddresses,Tags,State.Name,Platform,InstanceId]'`
+    #--instance-ids i-0f98c3e67f0f50bde \
 if [ $? -ne 0 ]; then
     exit 1
 fi
-HOSTS=`echo "$HOSTS" | grep -E '^(Env|Name|True\s*|10\.10|None|i-)'`
-#echo "$HOSTS\n==" ; exit
+HOSTS=`echo "$HOSTS" | grep -E '^(Env|Name|True\s*|10\.10|None)'`
 HOSTS=`echo "$HOSTS" | awk '{
-        if ( $0 ~ /^i\-[0-9a-f]*$/ ) {
-            host["aid"] = $0
-            next
-        }
         split($0,a," ");
-        if ( a[1] == "Name" ) { host[0] = a[2] }
-        else if ( a[1] == "Environment" ) { host[1] = a[2] }
+        if ( a[1] == "Name" ) { host[0] = a[2] ? a[2] : "empty" }
+        else if ( a[1] == "Environment" ) { host[1] = a[2] ? a[2] : "empty" }
         else if ( a[1] == "True" ) {
             if ( a[3] != host["ip"] ) host[2] = host[2]","a[3]
         }
@@ -40,10 +35,20 @@ HOSTS=`echo "$HOSTS" | awk '{
                 printf "%s##%s##%s##%s##%s##%s##%s\n",host[1],host[0],host["ip"],host["state"],host["Platform"],host["aid"],host[2]
                 delete host
             }
+            host[0] = "?"; host[1] = "?"
+            if ( a[5] != "" ) {
+                delete a[1]
+                n = ""
+                for (i in a) {
+                    n = n " " a[i]
+                }
+                split(n,a," ")
+            }
             host["ip"] = a[1]
             host["state"] = a[2]
             if ( a[3] == "None" ) a[3] = "-"
             host["Platform"] = a[3]
+            host["aid"] = a[4]
         }
     } END {
         printf "%s##%s##%s##%s##%s##%s##%s\n",host[1],host[0],host["ip"],host["state"],host["Platform"],host["aid"],host[2]
