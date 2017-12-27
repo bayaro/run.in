@@ -57,7 +57,7 @@ HOSTS=`echo "$HOSTS" | sed 's/##,/##/g'`
 #echo "$HOSTS=="
 if [ ! -z "$PATTERN" ]; then
     HOSTS=`echo "$HOSTS" | grep -E "$PATTERN"`
-    if [ "x$HOSTS" == "x" ]; then
+    if [ "x$HOSTS" = "x" ]; then
         echo "There are no hosts that contains '$PATTERN' in its description"
         exit 1
     fi
