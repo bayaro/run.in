@@ -7,14 +7,26 @@ while true; do
         "x-g") PATTERN=$2
             shift
             ;;
+        "x-s") SSH=1
+            shift
+            ;;
         *) break
             ;;
     esac
     shift
 done
 
+msg() {
+    echo "\033[0;35m$@\033[0;0m" >&2
+}
+if [ ! -z "$SSH" ]; then
+    REMOTE_CMD=ssh
+else
+    REMOTE_CMD="$@"
+fi
+msg ">>>>>> $REMOTE_CMD"
+
 PROFILE=`basename $0 | sed -E 's/run.in.(.*).sh/\1/'`
-echo ">>>>>> $@"
 
 HOSTS=`aws --output text --profile $PROFILE --region eu-west-1 ec2 describe-instances \
     --query 'Reservations[*].Instances[*].[PrivateIpAddress,NetworkInterfaces[*].PrivateIpAddresses,Tags,State.Name,Platform,InstanceId]'`
@@ -58,13 +70,13 @@ HOSTS=`echo "$HOSTS" | sed 's/##,/##/g'`
 if [ ! -z "$PATTERN" ]; then
     HOSTS=`echo "$HOSTS" | grep -E "$PATTERN"`
     if [ "x$HOSTS" = "x" ]; then
-        echo "There are no hosts that contains '$PATTERN' in its description"
+        msg "There are no hosts that contains '$PATTERN' in its description"
         exit 1
     fi
 fi
 
-if [ -z "$2" ] && [ "x$@" = "x" ]; then
-    echo "$HOSTS" | sed 's/##/ /g' | sort -k 1 | awk -F ' ' '{printf "===> %-15s %20s %s: %s (%s %s) %s\n",$3,$6,$1,$2,$4,$5,$7}' | grep --colour -E "$PATTERN"
+if [ -z "$2" ] && [ "x$REMOTE_CMD" = "x" ]; then
+    echo "$HOSTS" | sed 's/##/ /g' | sort -k 1 | awk -F ' ' '{printf "===> %-15s %20s %s: %s (%s %s) %s\n",$3,$6,$1,$2,$4,$5,$7}' | grep --color=auto -E "$PATTERN"
     exit 0
 fi
 
@@ -73,7 +85,8 @@ add_key() {
 }
 
 for h in $HOSTS; do
-    echo $h | sed 's/##/ /g' | awk -F ' ' '{printf "===> %-15s %20s %s: %s (%s %s) %s\n",$3,$6,$1,$2,$4,$5,$7}' | grep --colour -E "$PATTERN"
+    msg "--------------------------------------------------------------------------------"
+    msg `echo $h | sed 's/##/ /g' | awk -F ' ' '{printf "===> %-15s %20s %s: %s (%s %s) %s\n",$3,$6,$1,$2,$4,$5,$7}' | grep --color=always -E "$PATTERN"`
     state=`echo $h | awk -F '##' '{print $4}'`
     if [ "$state" != "running" ]; then continue; fi
     platform=`echo $h | awk -F '##' '{print $5}'`
@@ -83,37 +96,40 @@ for h in $HOSTS; do
     name=`echo $h | awk -F '##' '{print $2}'`
     ip=`echo $h | awk -F '##' '{print $3}'`
     otherip=`echo $h | awk -F '##' '{print $7}'`
-    echo " $otherip"
+    msg " $otherip"
 
     while [ true ]; do
-        ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 $ip -qo PasswordAuthentication=no $@
+        if [ ! -z "$SSH" ]; then
+            ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 $ip
+        else
+            ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 $ip -qo PasswordAuthentication=no $REMOTE_CMD
+        fi
         RES=$?
         if [ $RES -eq  0 ]; then break; fi
 
-        echo "EROROR: $RES"
+        msg "EROROR: $RES"
         if [ "x$otherip" != "x" ]; then
             ip=`echo "$otherip" | awk -F ',' '{print $1}'`
             otherip=`echo "$otherip" | sed -E 's/^[^,]*,*(.*)$/\1/'`
-            echo "===> Using other ip $ip ..."
+            msg "===> Using other ip $ip ..."
             continue
         fi
 
-        echo "Continue? [y/N]"
         if [ "$YES" = "1" ]; then
-            y=y
-        else
-            read y
+            break
         fi
+        msg "Continue? [y/N]"
+        read y
         if [ "x$y" != "xy" ]; then
-            echo "ABORTED"
+            msg "ABORTED"
             exit 1
         else
             break
         fi
         #if [ $? -ne 0 ]; then
         #    add_key
-        #    ssh $ip $@
+        #    ssh $ip $REMOTE_CMD
     done
 done
 
-echo "DONE"
+msg "DONE"
