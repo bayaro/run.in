@@ -1,14 +1,17 @@
 #!/bin/sh
 
 while true; do
-    case "x$1" in
-        "x-y") YES=1
+    case "$1" in
+        "-y") YES=1
             ;;
-        "x-g") PATTERN=$2
+        "-g") PATTERN=$2
             shift
             ;;
-        "x-s") SSH=1
-            shift
+        "-s") SSH=1
+            ;;
+        "-r") SYNCENV=1
+            ;;
+        -sr) SSH=1 SYNCENV=1
             ;;
         *) break
             ;;
@@ -100,15 +103,18 @@ for h in $HOSTS; do
 
     while [ true ]; do
         if [ ! -z "$SSH" ]; then
-            ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 $ip
+            if [ ! -z "$SYNCENV" ]; then
+                (cd ~/bin && rsync -a -e ssh .bashrc .bash_profile .bash_completion vim/.vimrc baya@$ip:)
+            fi
+            ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 baya@$ip
         else
-            ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 $ip -qo PasswordAuthentication=no $REMOTE_CMD
+            ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 baya@$ip -qo PasswordAuthentication=no $REMOTE_CMD
         fi
         RES=$?
         if [ $RES -eq  0 ]; then break; fi
 
         msg "EROROR: $RES"
-        if [ "x$otherip" != "x" ]; then
+        if [ "x$RES" = "x" ] && [ "x$otherip" != "x" ]; then
             ip=`echo "$otherip" | awk -F ',' '{print $1}'`
             otherip=`echo "$otherip" | sed -E 's/^[^,]*,*(.*)$/\1/'`
             msg "===> Using other ip $ip ..."
