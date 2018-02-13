@@ -1,23 +1,30 @@
 #!/bin/sh
 
+USE_HOSTS_LIST_CACHE=1
 while true; do
     case "$1" in
-        "-y") YES=1
+        -y) YES=1
             ;;
-        "-g") PATTERN=$2
+        -g) PATTERN=$2
             shift
             ;;
-        "-s") SSH=1
+        -s) SSH=1
             ;;
-        "-r") SYNCENV=1
+        -r) SYNCENV=1
             ;;
         -sr) SSH=1 SYNCENV=1
+            ;;
+        -sum) SHOW_SUMMARY=1 YES=1
+            ;;
+        -nocache) USE_HOSTS_LIST_CACHE=0
             ;;
         *) break
             ;;
     esac
     shift
 done
+
+HOSTS_LIST_CACHE="/tmp/`basename $0`.cache"
 
 msg() {
     echo "\033[0;35m$@\033[0;0m" >&2
@@ -26,17 +33,25 @@ if [ ! -z "$SSH" ]; then
     REMOTE_CMD=ssh
 else
     REMOTE_CMD="$@"
+    if [ "x$@" = "x" ]; then USE_HOSTS_LIST_CACHE=0; fi
 fi
-msg ">>>>>> $REMOTE_CMD"
 
 PROFILE=`basename $0 | sed -E 's/run.in.(.*).sh/\1/'`
 
-HOSTS=`aws --output text --profile $PROFILE --region eu-west-1 ec2 describe-instances \
-    --query 'Reservations[*].Instances[*].[PrivateIpAddress,NetworkInterfaces[*].PrivateIpAddresses,Tags,State.Name,Platform,InstanceId]'`
-    #--instance-ids i-0f98c3e67f0f50bde \
+if [ ! -e "$HOSTS_LIST_CACHE" ] || [ $USE_HOSTS_LIST_CACHE -ne 1 ]; then
+    msg ">>>>>> $REMOTE_CMD"
+    HOSTS=`aws --output text --profile $PROFILE --region eu-west-1 ec2 describe-instances \
+        --query 'Reservations[*].Instances[*].[PrivateIpAddress,NetworkInterfaces[*].PrivateIpAddresses,Tags,State.Name,Platform,InstanceId]'`
+        #--instance-ids i-0f98c3e67f0f50bde \
+else
+    msg ">>> cached list >>> $REMOTE_CMD"
+    HOSTS=`cat "$HOSTS_LIST_CACHE"`
+fi
 if [ $? -ne 0 ]; then
     exit 1
 fi
+echo "$HOSTS" > "$HOSTS_LIST_CACHE"
+
 HOSTS=`echo "$HOSTS" | grep -E '^(Env|Name|True\s*|10\.10|None)'`
 HOSTS=`echo "$HOSTS" | awk '{
         split($0,a," ");
@@ -87,6 +102,13 @@ add_key() {
     cat ~/.ssh/id_rsa.pub | ssh $host 'if [ ! -d .ssh ]; then mkdir .ssh; fi ; cat > ~/.ssh/authorized_keys'
 }
 
+if [ "x$SHOW_SUMMARY" = "x1" ]; then
+    SHOW_SUMMARY_LOG="/tmp/`basename $0`"
+    rm -rf "$SHOW_SUMMARY_LOG"
+else
+    SHOW_SUMMARY_LOG="/dev/null"
+fi
+
 for h in $HOSTS; do
     msg "--------------------------------------------------------------------------------"
     msg `echo $h | sed 's/##/ /g' | awk -F ' ' '{printf "===> %-15s %20s %s: %s (%s %s) %s\n",$3,$6,$1,$2,$4,$5,$7}' | grep --color=always -E "$PATTERN"`
@@ -107,8 +129,12 @@ for h in $HOSTS; do
                 (cd ~/bin && rsync -a -e ssh .bashrc .bash_profile .bash_completion vim/.vimrc baya@$ip:)
             fi
             ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 baya@$ip
+        elif [ "x$RUN_IN_PARALLEL" = "x1" ]; then
+            ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 baya@$ip -qo PasswordAuthentication=no $REMOTE_CMD &
+            WAITFOR="$WAITFOR $!"
+            break
         else
-            ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 baya@$ip -qo PasswordAuthentication=no $REMOTE_CMD
+            ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 baya@$ip -qo PasswordAuthentication=no $REMOTE_CMD | tee -a "$SHOW_SUMMARY_LOG"
         fi
         RES=$?
         if [ $RES -eq  0 ]; then break; fi
@@ -121,7 +147,7 @@ for h in $HOSTS; do
             continue
         fi
 
-        if [ "$YES" = "1" ]; then
+        if [ "x$YES" = "x1" ]; then
             break
         fi
         msg "Continue? [y/N]"
@@ -138,4 +164,12 @@ for h in $HOSTS; do
     done
 done
 
+wait $WAITFOR
 msg "DONE"
+
+if [ "x$SHOW_SUMMARY" = "x1" ]; then
+    echo
+    echo "------ SUMMARY BEGIN --------------------"
+    cat "$SHOW_SUMMARY_LOG" | sort | uniq -c
+    echo "------ SUMMARY END ----------------------"
+fi
