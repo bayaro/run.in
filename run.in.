@@ -172,6 +172,7 @@ if [ "x$SHOW_SUMMARY" = "x1" ]; then
         rm -rf "$SHOW_SUMMARY_LOG"
     else
         SHOW_SUMMARY_LOG=`mktemp /tmp/$ME.summary.XXXXXXXX`
+        FILES_4_TRAP=$SHOW_SUMMARY_LOG
     fi
 else
     SHOW_SUMMARY_LOG="/dev/null"
@@ -184,11 +185,12 @@ if [ $RUN_IN_PARALLEL -eq 1 ]; then
         mkdir -p "$LOGDIR"
     else
         LOGDIR=`mktemp -d /tmp/$ME.XXXXXXXX`
+        FILES_4_TRAP="'$FILES_4_TRAP' '$LOGDIR'"
     fi
 fi
 
-if [ -z "$DEBUG" ]; then
-    trap 'rm -rf "'$SHOW_SUMMARY_LOG'" "'$LOGDIR'"; echo ; exit $?' 0 1 2 3 6 14 15
+if [ ! -z "$FILES_4_TRAP" ]; then
+    trap "rm -rf $FILES_4_TRAP; echo ; exit $?" 0 1 2 3 6 14 15
 fi
 
 UNIQUESTRINGTOCALCTOTAL="################## TOTAL"
