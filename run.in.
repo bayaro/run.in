@@ -3,6 +3,7 @@
 USE_HOSTS_LIST_CACHE=1
 RUN_IN_PARALLEL=0
 SSH=0
+SHOWSEQ=1
 while true; do
     case "$1" in
         -y) YES=1
@@ -22,7 +23,7 @@ while true; do
             ;;
         -nocache) USE_HOSTS_LIST_CACHE=0
             ;;
-        -par) RUN_IN_PARALLEL=1 YES=1 SSH=0
+        -par) RUN_IN_PARALLEL=1 YES=1 SSH=0 SHOWSEQ=0
             ;;
         *) break
             ;;
@@ -110,13 +111,21 @@ if [ -z "$2" ] && [ "x$REMOTE_CMD" = "x" ]; then
     exit 0
 fi
 
+HOSTS=`echo "$HOSTS" | grep -v '##windows##'`
+HOSTTODOCOUNT=`echo "$HOSTS" | wc -l | awk '{print $1}'`
+HOSTSEQNUM=0
+
 add_key() {
     cat ~/.ssh/id_rsa.pub | ssh $host 'if [ ! -d .ssh ]; then mkdir .ssh; fi ; cat > ~/.ssh/authorized_keys'
 }
 
-function process_host() {
+process_host() {
     verbose $1 "--------------------------------------------------------------------------------"
-    verbose $1 `echo $h | sed 's/##/ /g' | awk -F ' ' '{printf "===> %-15s %20s %s: %s (%s %s) %s\n",$3,$6,$1,$2,$4,$5,$7}' | grep --color=always -E "$PATTERN"`
+    if [ $SHOWSEQ -eq 1 ]; then
+        verbose $1 `echo $h | sed 's/##/ /g' | awk -F ' ' -v HSN=$HOSTSEQNUM -v HTDC=$HOSTTODOCOUNT '{printf "===> (%02d/%d) %-15s %20s %s: %s (%s %s) %s\n",HSN,HTDC,$3,$6,$1,$2,$4,$5,$7}' | grep --color=always -E "$PATTERN"`
+    else
+        verbose $1 `echo $h | sed 's/##/ /g' | awk -F ' ' '{printf "===> %-15s %20s %s: %s (%s %s) %s\n",$3,$6,$1,$2,$4,$5,$7}' | grep --color=always -E "$PATTERN"`
+    fi
     state=`echo $h | awk -F '##' '{print $4}'`
     if [ "$state" != "running" ]; then continue; fi
     platform=`echo $h | awk -F '##' '{print $5}'`
@@ -196,6 +205,7 @@ fi
 UNIQUESTRINGTOCALCTOTAL="################## TOTAL"
 
 for h in $HOSTS; do
+    let HOSTSEQNUM=HOSTSEQNUM+1
     ip=`echo $h | awk -F '##' '{print $3}'`
     if [ $RUN_IN_PARALLEL -ne 1 ]; then
         process_host
@@ -210,7 +220,7 @@ done
 
 wait $WAITFOR
 
-SUMMARY=`cat "$SHOW_SUMMARY_LOG" | sort | uniq -c | sort -rn`
+SUMMARY=`cat "$SHOW_SUMMARY_LOG" | sort | uniq -c | sort -n`
 TOTAL=`echo "$SUMMARY" | grep "$UNIQUESTRINGTOCALCTOTAL"`
 SUMMARY=`echo "$SUMMARY" | grep -v "$UNIQUESTRINGTOCALCTOTAL"`
 if [ $RUN_IN_PARALLEL -eq 1 ]; then
@@ -223,16 +233,26 @@ if [ $RUN_IN_PARALLEL -eq 1 ]; then
         list=`echo "$list" | grep -v $F`
         cat "$F"
     done
-    IFS=$'\n'
+    IFS='
+'
+    SHOWORDER=
     for S in $SUMMARY; do
         S=`echo "$S" | sed -E 's/^ *[0-9]* *(.*)$/\1/'`
         files=`grep -l "$S" *`
         for F in $files; do
+            echo "$list" | grep -q "$F"
+            if [ $? -ne 0 ]; then continue ; fi
+
             list=`echo "$list" | grep -v $F`
-            cat "$F"
+            SHOWORDER="$F $SHOWORDER"
         done
+        SHOWORDER="\n$SHOWORDER"
     done
+    SHOWORDER=`echo "$SHOWORDER"`
     IFS=$old_IFS
+    for S in $SHOWORDER; do
+        cat $S
+    done
     for F in $list; do
         cat "$F"
     done
@@ -241,9 +261,9 @@ fi
 verbose "DONE"
 
 if [ "x$SHOW_SUMMARY" = "x1" ]; then
-    HC=`echo "$HOSTS" | wc -l | awk '{print $1}'`
+    SUMMARY=`echo "$SUMMARY" | sort -rn`
     echo
-    printf -- "------ SUMMARY of %3d hosts -------------\n" $HC
+    printf -- "------ SUMMARY of %3d hosts -------------\n" $HOSTTODOCOUNT
     echo "$SUMMARY"
     echo "$TOTAL" | tr -d '#' # see UNIQUESTRINGTOCALCTOTAL
     echo     "------ SUMMARY END ----------------------"
