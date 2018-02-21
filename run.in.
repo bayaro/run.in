@@ -220,20 +220,20 @@ fi
 
 RUNINPAR=0
 for h in $HOSTS; do
-    let HOSTSEQNUM=HOSTSEQNUM+1
+    HOSTSEQNUM=`echo "$HOSTSEQNUM + 1" | bc`
     ip=`echo $h | awk -F '##' '{print $3}'`
     LF="$LOGDIR/$ip"
     touch "$LF"
 
     if [ $RUN_IN_PARALLEL -ne 1 ]; then
-        process_host | tee -a "$LOGDIR/$ip"
+        process_host 2>&1 | tee -a "$LOGDIR/$ip"
         if [ ${PIPESTATUS[0]} -ne 0 ]; then break; fi
         continue
     fi
 
     printf " $ip"
     process_host "$LF" 2>&1 >> "$LOGDIR/$ip" &
-    let RUNINPAR=RUNINPAR+1
+    RUNINPAR=`echo "$RUNINPAR + 1" | bc`
     if [ $RUNINPAR -ge 120 ]; then
         echo
         verbose "Waiting ..."
