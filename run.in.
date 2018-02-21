@@ -196,11 +196,11 @@ process_host() {
 }
 
 on_preExit() {
-  echo
-  #echo 'Exiting...' # Runs just before actual exit,
-                    # shell will execute EXIT(0) after finishing this function
-                    # that we hook also in on_exit function
-  exit 2
+    echo
+    #echo 'Exiting...' # Runs just before actual exit,
+                       # shell will execute EXIT(0) after finishing this function
+                       # that we hook also in on_exit function
+    exit 2
 }
 
 if [ ! -z "$DEBUG" ]; then
@@ -210,7 +210,7 @@ if [ ! -z "$DEBUG" ]; then
 else
     LOGDIR=`mktemp -d /tmp/$ME.XXXXXXXX`
     trap on_preExit 1 2 3 6 14 15 30 # HUP INT QUIT TERM STOP PWR  # 1 2 3 15 30
-    trap "rm -rf '$LOGDIR'; echo" 0 # EXIT
+    trap "rm -rf '$LOGDIR'; kill 0; echo" 0 # EXIT
 fi
 
 RUNINPAR=0 WAITFOR=
