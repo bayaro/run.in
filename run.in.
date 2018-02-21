@@ -244,9 +244,8 @@ done
 
 if [ $RUN_IN_PARALLEL -eq 1 ]; then
     echo
-    verbose "Waiting ..."
+    verbose "Waiting for ssh requests ..."
     wait
-    echo
 fi
 
 SUMMARY=`cat $LOGDIR/* | grep -v "$VERBOSE_PREFIX" | sed 's///g' | sort | uniq -c | sort -n`
@@ -260,10 +259,13 @@ if [ $RUN_IN_PARALLEL -eq 1 ]; then
         list=`echo "$list" | grep -v $F`
         cat "$F"
     done
+    verbose "Summarising `echo "$SUMMARY" | wc -l` lines ..."
     IFS='
 '
-    SHOWORDER=
+    printf '.'
+    SHOWORDER= L=0
     for S in $SUMMARY; do
+        L=`echo "$L + 1" | bc`
         S=`echo "$S" | sed -E 's/^ *[0-9]* *(.*)$/\1/'`
         files=`grep -l "$S" *`
         for F in $files; do
@@ -274,7 +276,16 @@ if [ $RUN_IN_PARALLEL -eq 1 ]; then
             SHOWORDER="$F $SHOWORDER"
         done
         SHOWORDER="\n$SHOWORDER"
+        if [ "x`echo "$L % 10" | bc`" = "x0" ]; then
+            if [ "x`echo "$L % 100" | bc`" = "x0" ]; then
+                printf $L
+            else
+                printf '.'
+            fi
+        fi
     done
+    echo $L
+    echo
     SHOWORDER=`echo "$SHOWORDER"`
     IFS=$old_IFS
     for S in $SHOWORDER; do
