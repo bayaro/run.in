@@ -249,7 +249,7 @@ if [ $RUN_IN_PARALLEL -eq 1 ]; then
     echo
 fi
 
-SUMMARY=`cat $LOGDIR/* | grep -v "$VERBOSE_PREFIX" | sort | uniq -c | sort -n`
+SUMMARY=`cat $LOGDIR/* | grep -v "$VERBOSE_PREFIX" | sed 's///g' | sort | uniq -c | sort -n`
 
 if [ $RUN_IN_PARALLEL -eq 1 ]; then
     old_IFS=$IFS      # save the field separator
