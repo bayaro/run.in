@@ -23,7 +23,7 @@ while true; do
             ;;
         -nocache) USE_HOSTS_LIST_CACHE=0
             ;;
-        -par) RUN_IN_PARALLEL=1 YES=1 SHOW_SUMMARY=1
+        -p|-par) RUN_IN_PARALLEL=1 YES=1 SHOW_SUMMARY=1
             ;;
         *) break
             ;;
@@ -203,6 +203,8 @@ on_preExit() {
     exit 2
 }
 
+ssh-add > /dev/null 2>&1
+
 if [ ! -z "$DEBUG" ]; then
     LOGDIR="/tmp/$ME.logs"
     rm -rf "$LOGDIR"
@@ -217,7 +219,7 @@ RUNINPAR=0 WAITFOR=
 for h in $HOSTS; do
     HOSTSEQNUM=`echo "$HOSTSEQNUM + 1" | bc`
     ip=`echo $h | awk -F '##' '{print $3}'`
-    LF="$LOGDIR/$ip"
+    LF=`printf "$LOGDIR/%02d-$ip" $HOSTSEQNUM`
     touch "$LF"
 
     if [ $RUN_IN_PARALLEL -ne 1 ]; then
@@ -230,7 +232,7 @@ for h in $HOSTS; do
         continue
     fi
 
-    printf " $ip"
+    printf " $ip" > /dev/stderr
     process_host "$LF" 2>&1 >> "$LF" &
     WAITFOR="$WAITFOR $!"
     RUNINPAR=`echo "$RUNINPAR + 1" | bc`
@@ -245,7 +247,7 @@ done
 if [ $RUN_IN_PARALLEL -eq 1 ]; then
     echo
     verbose "Waiting for ssh requests ..."
-    wait
+    wait $WAITFOR
 fi
 
 SUMMARY=`cat $LOGDIR/* | grep -v "$VERBOSE_PREFIX" | sed 's///g' | sort | uniq -c | sort -n`
@@ -267,7 +269,7 @@ if [ $RUN_IN_PARALLEL -eq 1 ]; then
     for S in $SUMMARY; do
         L=`echo "$L + 1" | bc`
         S=`echo "$S" | sed -E 's/^ *[0-9]* *(.*)$/\1/'`
-        files=`grep -l -- "$S" *`
+        files=`grep -l -- "$S" * | sort -r`
         for F in $files; do
             echo "$list" | grep -q "$F"
             if [ $? -ne 0 ]; then continue ; fi
