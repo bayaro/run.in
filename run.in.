@@ -267,7 +267,7 @@ if [ $RUN_IN_PARALLEL -eq 1 ]; then
     for S in $SUMMARY; do
         L=`echo "$L + 1" | bc`
         S=`echo "$S" | sed -E 's/^ *[0-9]* *(.*)$/\1/'`
-        files=`grep -l "$S" *`
+        files=`grep -l -- "$S" *`
         for F in $files; do
             echo "$list" | grep -q "$F"
             if [ $? -ne 0 ]; then continue ; fi
