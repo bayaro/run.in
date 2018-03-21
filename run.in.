@@ -146,16 +146,22 @@ process_host() {
     USEPROXY=0
     while [ true ]; do
         if [ $SSH -eq 1 ]; then
-            USEPROXY=1 # always use proxy
-            if [ ! -z "$SYNCENV" ]; then
-                verbose $1 "Synchronizing ..."
+            if [ ! -z "$SYNCENV" ] && [ $USEPROXY -eq 0 ]; then # always use proxy
+                verbose $1 "Synchronizing there ..."
                 cd ~/bin
                 rsync -a -e "ssh -A $PROXY_PREF$PROFILE$PROXY_SUF ssh -o StrictHostKeyChecking=no" .bashrc .bash_profile .bash_completion vim/.vimrc .bash_history baya@$ip:
                 cd - > /dev/null
             fi
-            ssh -A -tt $PROXY_PREF$PROFILE$PROXY_SUF ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 baya@$ip
+            if [ $USEPROXY -eq 0 ]; then
+                ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 baya@$ip
+            else
+                ssh -A -tt $PROXY_PREF$PROFILE$PROXY_SUF ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 baya@$ip
+            fi
             RES=$?
-            rsync -a -e "ssh -A $PROXY_PREF$PROFILE$PROXY_SUF ssh -o StrictHostKeyChecking=no" baya@$ip:.bash_history ~/bin/.bash_history
+            if [ $RES -eq 0 ] && [ ! -z "$SYNCENV" ]; then
+                verbose $1 "Synchronizing here ..."
+                rsync -a -e "ssh -A $PROXY_PREF$PROFILE$PROXY_SUF ssh -o StrictHostKeyChecking=no" baya@$ip:.bash_history ~/bin/.bash_history
+            fi
         else
             if [ $USEPROXY -eq 0 ]; then
                 ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 baya@$ip -qo PasswordAuthentication=no 2>&1 $REMOTE_CMD
