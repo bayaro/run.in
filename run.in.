@@ -19,11 +19,13 @@ while true; do
         -sr) SSH=1 SYNCENV=1 PATTERN=$2
             shift
             ;;
-        -sum) SHOW_SUMMARY=1 YES=1
+        -ss|-sum) SHOW_SUMMARY=1 YES=1
             ;;
         -nc|-nocache) USE_HOSTS_LIST_CACHE=0
             ;;
-        -p|-par) RUN_IN_PARALLEL=1 YES=1 SHOW_SUMMARY=1
+        -p|-par) RUN_IN_PARALLEL=1 YES=1
+            ;;
+        -ps) RUN_IN_PARALLEL=1 YES=1 SHOW_SUMMARY=1
             ;;
         *) break
             ;;
@@ -258,6 +260,18 @@ if [ $RUN_IN_PARALLEL -eq 1 ]; then
     wait $WAITFOR
 fi
 
+if [ "x$SHOW_SUMMARY" != "x1" ]; then
+    if [ $RUN_IN_PARALLEL -eq 1 ]; then
+        cd "$LOGDIR"
+        for F in `ls -tr`; do
+            cat "$F"
+        done
+    fi
+
+    verbose "DONE"
+    exit 0
+fi
+
 SUMMARY=`cat $LOGDIR/* | grep -v "$VERBOSE_PREFIX" | sed 's///g' | sort | uniq -c | sort -n`
 
 if [ $RUN_IN_PARALLEL -eq 1 ]; then
@@ -305,8 +319,6 @@ if [ $RUN_IN_PARALLEL -eq 1 ]; then
         cat "$F"
     done
 fi
-
-verbose "DONE"
 
 if [ "x$SHOW_SUMMARY" = "x1" ]; then
     SUMMARY=`echo "$SUMMARY" | sort -rn`
