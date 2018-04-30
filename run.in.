@@ -117,7 +117,9 @@ if [ ! -z "$PATTERN" ]; then
 fi
 
 if [ -z "$2" ] && [ "x$REMOTE_CMD" = "x" ]; then
-    echo "$HOSTS" | sed 's/##/ /g' | sort -k 1 | awk -F ' ' '{printf "===> %-14s %20s %s: %s (%s %s) %s\n",$3,$6,$1,$2,$4,$5,$7}' | grep --color=auto -E "$PATTERN"
+    list=`echo "$HOSTS" | sed 's/##/ /g' | sort -k 1 | awk -F ' ' '{printf "===> %-14s %20s %s: %s (%s %s) %s\n",$3,$6,$1,$2,$4,$5,$7}' | grep --color=auto -E "$PATTERN"`
+    echo "$list"
+    verbose "`echo "$list" | wc -l` hosts found"
     exit 0
 fi
 
