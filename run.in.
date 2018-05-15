@@ -153,7 +153,8 @@ process_host() {
             if [ ! -z "$SYNCENV" ] && [ $USEPROXY -eq 0 ]; then # always use proxy
                 verbose $1 "Synchronizing there ..."
                 cd ~/bin
-                rsync -a -e "ssh -A $PROXY_PREF$PROFILE$PROXY_SUF ssh -o StrictHostKeyChecking=no" .bashrc .bash_profile .bash_completion vim/.vimrc .bash_history baya@$ip:
+                rsync -a -e "ssh -A $PROXY_PREF$PROFILE$PROXY_SUF ssh -o StrictHostKeyChecking=no" .bashrc .bash_profile .bash_completion vim/.vimrc baya@$ip:
+                rsync -a -e "ssh -A $PROXY_PREF$PROFILE$PROXY_SUF ssh -o StrictHostKeyChecking=no" ~/.bash_aws_history baya@$ip:.bash_history
                 cd - > /dev/null
             fi
             if [ $USEPROXY -eq 0 ]; then
@@ -164,7 +165,7 @@ process_host() {
             RES=$?
             if [ $RES -eq 0 ] && [ ! -z "$SYNCENV" ]; then
                 verbose $1 "Synchronizing here ..."
-                rsync -a -e "ssh -A $PROXY_PREF$PROFILE$PROXY_SUF ssh -o StrictHostKeyChecking=no" baya@$ip:.bash_history ~/bin/.bash_history
+                rsync -a -e "ssh -A $PROXY_PREF$PROFILE$PROXY_SUF ssh -o StrictHostKeyChecking=no" baya@$ip:.bash_history ~/.bash_aws_history
             fi
         else
             if [ $USEPROXY -eq 0 ]; then
