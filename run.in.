@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 USE_HOSTS_LIST_CACHE=1
 RUN_IN_PARALLEL=0
@@ -47,7 +47,7 @@ verbose() {
     else
         TO=/dev/stderr
     fi
-    echo "\033[0;35m$VERBOSE_PREFIX $@\033[0;0m" >> "$TO"
+    echo -e "\e[0;33m$VERBOSE_PREFIX $@\e[0;0m" >> "$TO"
 }
 
 if [ $SSH -eq 1 ] && ( [ $RUN_IN_PARALLEL -eq 1 ] || [ $SHOW_SUMMARY -eq 1 ] ); then
@@ -55,28 +55,19 @@ if [ $SSH -eq 1 ] && ( [ $RUN_IN_PARALLEL -eq 1 ] || [ $SHOW_SUMMARY -eq 1 ] ); 
     exit 1
 fi
 
-if [ $SSH -eq 1 ]; then
-    REMOTE_CMD=ssh # just to inform on beggining
-else
-    REMOTE_CMD="$@"
-    if [ -z "$REMOTE_CMD" ]; then
-        USE_HOSTS_LIST_CACHE=0;
-    elif [ ! -e "$REMOTE_CMD" ]; then
-        echo "$REMOTE_CMD" > /tmp/remote_cmd
-        REMOTE_CMD=/tmp/remote_cmd
-    fi
+PROFILE=`echo "$ME" | sed -E 's/run.in.((.*).sh*)*$/\2/'`
+if [ -z "$PROFILE" ]; then
+    PROFILE=default
 fi
-
-
-PROFILE=`echo "$ME" | sed -E 's/run.in.(.*).sh/\1/'`
+verbose "Using profile '$PROFILE'"
 
 if [ ! -e "$HOSTS_LIST_CACHE" ] || [ $USE_HOSTS_LIST_CACHE -ne 1 ]; then
-    verbose ">>>>>> $REMOTE_CMD"
-    HOSTS=`aws --output text --profile $PROFILE --region eu-west-1 ec2 describe-instances \
-        --query 'Reservations[*].Instances[*].[PrivateIpAddress,NetworkInterfaces[*].PrivateIpAddresses,Tags,State.Name,Platform,InstanceId]'`
+    verbose "Loading host list"
+    HOSTS=`aws --output json --profile $PROFILE ec2 describe-instances \
+        --query 'Reservations[*].Instances[*].{nif:NetworkInterfaces[*].PrivateIpAddresses[*].{public:Association.PublicIp,private:PrivateIpAddress},tags:Tags,state:State.Name,platform:Platform,id:InstanceId}'`
         #--instance-ids i-0f98c3e67f0f50bde \
 else
-    verbose "CACHED >>>>>> $REMOTE_CMD"
+    verbose "Cached host list is using: [details: $(ls -l "$HOSTS_LIST_CACHE")]"
     HOSTS=`cat "$HOSTS_LIST_CACHE"`
 fi
 if [ $? -ne 0 ]; then
@@ -84,44 +75,60 @@ if [ $? -ne 0 ]; then
 fi
 echo "$HOSTS" > "$HOSTS_LIST_CACHE"
 
-HOSTS=`echo "$HOSTS" | grep -E '^(Env|Name|True\s*|10\.10|None)'`
-HOSTS=`echo "$HOSTS" | awk '{
-        split($0,a," ");
-        if ( a[1] == "Name" ) { host[0] = a[2] ? a[2] : "empty" }
-        else if ( a[1] == "Environment" ) { host[1] = a[2] ? a[2] : "empty" }
-        else if ( a[1] == "True" ) {
-            if ( a[3] != host["ip"] ) host[2] = host[2]","a[3]
-        }
-        else {
-            if ( host["ip"] ) {
-                printf "%s##%s##%s##%s##%s##%s##%s\n",host[1],host[0],host["ip"],host["state"],host["Platform"],host["aid"],host[2]
-                delete host
-            }
-            host[0] = "?"; host[1] = "?"
-            if ( a[5] != "" ) {
-                delete a[1]
-                n = ""
-                for (i in a) {
-                    n = n " " a[i]
-                }
-                split(n,a," ")
-            }
-            host["ip"] = a[1]
-            host["state"] = a[2]
-            if ( a[3] == "None" ) a[3] = "-"
-            host["Platform"] = a[3]
-            host["aid"] = a[4]
-        }
-    } END {
-        printf "%s##%s##%s##%s##%s##%s##%s\n",host[1],host[0],host["ip"],host["state"],host["Platform"],host["aid"],host[2]
-    }' | sort -g`
-HOSTS=`echo "$HOSTS" | sed 's/##,/##/g'`
+HOSTS=$(echo "$HOSTS" | jq -rc '.[] | to_entries | .[] | @sh "[\(.value.id)]=\(.value | tostring)"')
+eval "declare -A HOSTS=($HOSTS)"
+
+HOSTS=$(
+for host in "${HOSTS[@]}"; do
+    host=$(echo "$host" | jq -rc 'to_entries | .[] | @sh "[\(.key)]=\(.value | tostring)"')
+    eval "declare -A host=($host)"
+    nif=${host[nif]}
+    nif=$(echo "$nif" | jq -rc '[.[][] | to_entries[]] | reduce .[] as $d (null; .[$d.key] += [$d.value])')
+    nif=$(echo "$nif" | jq -rc '(.public | tostring)+ "," + (.private | tostring) + ","' | tr -d '[]"' | sed -E 's/(null,|,+$)//g')
+    host[ip]=$(echo $nif | sed -E 's/^([^,$]*).*$/\1/g')
+    nif=$(echo $nif | sed -E 's/^([^,$]*)(.*)$/\2/g')
+    tags=${host[tags]}
+    tags=$(echo "$tags" | jq -rc '[.[] | .["key"] = .Key | .["value"] = .Value] | from_entries')
+    names=$(echo "$tags" | jq -rc 'to_entries | .[] | @sh "[\(.key)]=\(.value | tostring)"')
+    tags=$(echo "$tags" \
+        | jq -rc '[to_entries[] | .["v"] = .key + "=" + (.value | tostring)] | reduce .[] as $d (null; .["xxx"] += [$d.v]) | .xxx' \
+        | tr -d '[]"'
+    )
+    host[tags]=$tags
+    eval "declare -A names=($names)"
+    host[name]=${names[Name]:-"???"}
+    host[env]=${names[Environment]:-"???"}
+    if [ "x${host[platform]}" = "xnull" ]; then
+        host[platform]="-"
+    fi
+    host[1]=${names[Environment]:-"???"}
+    printf "%s##%s##%s##%s##%s##%s##%s##%s\n" ${host[env]} ${host[name]} ${host[ip]} ${host[state]} ${host[platform]} ${host[id]} ${nif} ${host[tags]}
+done)
+
+HOSTS=`echo "$HOSTS" | sort -g | sed 's/##,/##/g'`
 #echo "$HOSTS=="
+
 if [ ! -z "$PATTERN" ]; then
     HOSTS=`echo "$HOSTS" | grep -E "$PATTERN"`
     if [ "x$HOSTS" = "x" ]; then
         verbose "There are no hosts that contains '$PATTERN' in its description"
         exit 1
+    fi
+fi
+
+if [ $SSH -eq 1 ]; then
+    REMOTE_CMD=ssh # just to inform on beggining
+else
+    REMOTE_CMD="$@"
+fi
+
+if [ -z "$REMOTE_CMD" ]; then
+    USE_HOSTS_LIST_CACHE=0;
+else
+    verbose ">>>>>> $REMOTE_CMD"
+    if [ ! -e "$REMOTE_CMD" ]; then
+        echo "$REMOTE_CMD" > /tmp/remote_cmd
+        REMOTE_CMD=/tmp/remote_cmd
     fi
 fi
 
@@ -144,9 +151,9 @@ process_host() {
     verbose $1 "--------------------------------------------------------------------------------"
     verbose $1 "`echo $h | sed 's/##/ /g' | awk -F ' ' -v HSN=$HOSTSEQNUM -v HTDC=$HOSTTODOCOUNT '{printf "(%02d/%d) %-14s %20s %s: %s (%s %s) %s\n",HSN,HTDC,$3,$6,$1,$2,$4,$5,$7}' | grep --color=always -E "$PATTERN"`"
     local state=`echo $h | awk -F '##' '{print $4}'`
-    if [ "$state" != "running" ]; then continue; fi
+    if [ "$state" != "running" ]; then return; fi
     local platform=`echo $h | awk -F '##' '{print $5}'`
-    if [ "$platform" != "-" ]; then continue; fi
+    if [ "$platform" != "-" ]; then return; fi
 
     env=`echo $h | awk -F '##' '{print $1}'`
     name=`echo $h | awk -F '##' '{print $2}'`
@@ -158,14 +165,14 @@ process_host() {
 
     USEPROXY=0
     while [ true ]; do
-        if [ $SYNCENV -gt 0 ] && [ $USEPROXY -eq 0 ]; then # always use proxy
-            verbose $1 "Synchronizing there ..."
-            cd ~/bin
-            rsync -a -e "ssh -A $PROXY_PREF$PROFILE$PROXY_SUF ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2" .bashrc .bash_profile .bash_completion vim/.vimrc baya@$ip:
-            rsync -a -e "ssh -A $PROXY_PREF$PROFILE$PROXY_SUF ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2" ~/.bash_aws_history baya@$ip:.bash_history
-            cd - > /dev/null
-        fi
-        ssh_cmd="ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2 -qo PasswordAuthentication=no baya@$ip"
+        #if [ $SYNCENV -gt 0 ] && [ $USEPROXY -eq 0 ]; then # always use proxy
+        #    verbose $1 "Synchronizing there ..."
+        #    cd ~/bin
+        #    rsync -a -e "ssh -A $PROXY_PREF$PROFILE$PROXY_SUF ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2" .bashrc .bash_profile .bash_completion vim/.vimrc baya@$ip:
+        #    rsync -a -e "ssh -A $PROXY_PREF$PROFILE$PROXY_SUF ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2" ~/.bash_aws_history baya@$ip:.bash_history
+        #    cd - > /dev/null
+        #fi
+        ssh_cmd="ssh -p 909 -o StrictHostKeyChecking=no -o ConnectTimeout=2 -qo PasswordAuthentication=no baya@$ip"
         if [ $SSH -eq 1 ]; then
             if [ $USEPROXY -eq 0 ]; then
                 $ssh_cmd 2>&1
