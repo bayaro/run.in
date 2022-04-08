@@ -8,5 +8,11 @@ PROXY_PORT=22
 SSH_USR=
 SSH_PORT=22
 
+# default: aws
+CLOUD_TYPE=[aws|maestro]
+
+MAESTRO_PROJECT=
+MAESTRO_REGION=
+
 # The End
 
