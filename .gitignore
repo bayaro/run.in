@@ -1,1 +1,3 @@
 run.in.*.sh
+run.in.cfg*
+!run.in.cfg.sample

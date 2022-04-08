@@ -139,6 +139,26 @@ if [ -z "$REMOTE_CMD" ] && [ $SYNCENV -eq 0 ]; then
     exit 0
 fi
 
+do_config() {
+    local conf=$(dirname "$0")/run.in.cfg
+    if [ -e "$conf" ]; then
+        verbose "Loading $conf ..."
+        source "$conf"
+    fi
+    while [ -n "$1" ]; do
+        conf=${conf}.${1}
+        shift
+        if [ -e "$conf" ]; then
+            verbose "Loading $conf ..."
+            source "$conf"
+        fi
+    done
+    if [ -n "$SSH_USR" ]; then
+        SSH_USR="${SSH_USR}@"
+    fi
+}
+do_config $PROFILE
+
 HOSTS=`echo "$HOSTS" | grep -v '##windows##'`
 HOSTTODOCOUNT=`echo "$HOSTS" | wc -l | awk '{print $1}'`
 HOSTSEQNUM=0
@@ -168,27 +188,27 @@ process_host() {
         #if [ $SYNCENV -gt 0 ] && [ $USEPROXY -eq 0 ]; then # always use proxy
         #    verbose $1 "Synchronizing there ..."
         #    cd ~/bin
-        #    rsync -a -e "ssh -A $PROXY_PREF$PROFILE$PROXY_SUF ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2" .bashrc .bash_profile .bash_completion vim/.vimrc baya@$ip:
-        #    rsync -a -e "ssh -A $PROXY_PREF$PROFILE$PROXY_SUF ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2" ~/.bash_aws_history baya@$ip:.bash_history
+        #    rsync -a -e "ssh -A $PROXY_HOST ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2" .bashrc .bash_profile .bash_completion vim/.vimrc $SSH_USR$ip:
+        #    rsync -a -e "ssh -A $PROXY_HOST ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2" ~/.bash_aws_history $SSH_USR$ip:.bash_history
         #    cd - > /dev/null
         #fi
-        ssh_cmd="ssh -p 909 -o StrictHostKeyChecking=no -o ConnectTimeout=2 -qo PasswordAuthentication=no baya@$ip"
+        ssh_cmd="ssh -p 909 -o StrictHostKeyChecking=no -o ConnectTimeout=2 -qo PasswordAuthentication=no $SSH_USR$ip"
         if [ $SSH -eq 1 ]; then
             if [ $USEPROXY -eq 0 ]; then
                 $ssh_cmd 2>&1
             else
-                ssh -qA -tt $PROXY_PREF$PROFILE$PROXY_SUF $ssh_cmd
+                ssh -qA -tt $PROXY_HOST $ssh_cmd
             fi
             RES=$?
             if [ $RES -eq 0 ] && [ $SYNCENV -gt 1 ]; then
                 verbose $1 "Synchronizing here ..."
-                rsync -a -e "ssh -A $PROXY_PREF$PROFILE$PROXY_SUF ssh -o StrictHostKeyChecking=no" baya@$ip:.bash_history ~/.bash_aws_history
+                rsync -a -e "ssh -A $PROXY_HOST ssh -o StrictHostKeyChecking=no" $SSH_USR$ip:.bash_history ~/.bash_aws_history
             fi
         elif [ -n "$REMOTE_CMD" ]; then
             if [ $USEPROXY -eq 0 ]; then
                 cat $REMOTE_CMD | $ssh_cmd 2>&1 'cat > ./remote_cmd && chmod u+x ./remote_cmd && ./remote_cmd ; RES=$?; rm ./remote_cmd; exit $RES'
             else
-                cat $REMOTE_CMD | ssh -qA $PROXY_PREF$PROFILE$PROXY_SUF 2>&1 "cat | $ssh_cmd 'cat > ./remote_cmd && chmod u+x ./remote_cmd && ./remote_cmd ; RES=\$?; rm ./remote_cmd ; exit \$RES'"
+                cat $REMOTE_CMD | ssh -qA $PROXY_HOST 2>&1 "cat | $ssh_cmd 'cat > ./remote_cmd && chmod u+x ./remote_cmd && ./remote_cmd ; RES=\$?; rm ./remote_cmd ; exit \$RES'"
             fi
             RES=$?
         else
@@ -198,9 +218,11 @@ process_host() {
 
         #verbose $1 "ERROR: $RES"
         if [ $RES -eq 255 ] && [ $USEPROXY -eq 0 ]; then # 255 is code of no direct ssh
-            verbose $1 "Using proxy ..."
-            USEPROXY=1
-            continue
+            if [ -n "$PROXY_HOST" ]; then
+                verbose $1 "Using proxy ..."
+                USEPROXY=1
+                continue
+            fi
         else
             USEPROXY=0
         fi

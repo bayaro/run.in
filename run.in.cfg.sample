@@ -1,0 +1,10 @@
+#
+
+# do not set if you don't need it
+PROXY_HOST=<ssh_jump_usr>@<ssh_jump_host>
+
+# self described
+SSH_USR=
+
+# The End
+
