@@ -111,7 +111,7 @@ parse_aws() {
     nif=$(echo "$nif" | jq -rc '[.[][] | to_entries[]] | reduce .[] as $d (null; .[$d.key] += [$d.value])')
     nif=$(echo "$nif" | jq -rc '(.public | tostring)+ "," + (.private | tostring) + ","' | tr -d '[]"' | sed -E 's/(null,|,+$)//g')
     host[ip]=$(echo $nif | sed -E 's/^([^,$]*).*$/\1/g')
-    nif=$(echo $nif | sed -E 's/^([^,$]*)(.*)$/\2/g')
+    nif=$(echo $nif | sed -E -e 's/^([^,$]*)(.*)$/\2/g' -e 's/^,//')
     local tags=${host[tags]}
     tags=$(echo "$tags" | jq -rc '[.[] | .["key"] = .Key | .["value"] = .Value] | from_entries')
     local names=$(echo "$tags" | jq -rc 'to_entries | .[] | @sh "[\(.key)]=\(.value | tostring)"')
@@ -158,12 +158,12 @@ for host in "${HOSTS[@]}"; do
     fi
 done)
 
-HOSTS=`echo "$HOSTS" | sort -g | sed 's/##,/##/g'`
+HOSTS=$(echo "$HOSTS" | sort -g)
 #echo "$HOSTS=="
 
-if [ ! -z "$PATTERN" ]; then
-    HOSTS=`echo "$HOSTS" | grep -E "$PATTERN"`
-    if [ "x$HOSTS" = "x" ]; then
+if [ -n "$PATTERN" ]; then
+    HOSTS=$(echo "$HOSTS" | grep -E "$PATTERN")
+    if [ -z "$HOSTS" ]; then
         verbose "There are no hosts that contains '$PATTERN' in its description"
         exit 1
     fi
@@ -186,7 +186,7 @@ else
 fi
 
 if [ -z "$REMOTE_CMD" ] && [ $SYNCENV -eq 0 ]; then
-    list=`echo "$HOSTS" | awk -F '##' '{printf "===> %-14s %20s %s: %s (%s %s) %s %s\n",$3,$6,$1,$2,$4,$5,$7,$8}' | grep --color=auto -E "$PATTERN"`
+    list=`echo "$HOSTS" | awk -F '##' '{printf "===> %-14s %20s %s: %s (%s %s) %s %s\n",$3,$6,$1,$2,$4,$5,$7,$8}' | grep --color=auto -E "$PATTERN|$"`
     echo "$list"
     verbose "`echo "$list" | wc -l` hosts found"
     exit 0
