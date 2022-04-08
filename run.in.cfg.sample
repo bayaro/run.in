@@ -2,9 +2,11 @@
 
 # do not set if you don't need it
 PROXY_HOST=<ssh_jump_usr>@<ssh_jump_host>
+PROXY_PORT=22
 
 # self described
 SSH_USR=
+SSH_PORT=22
 
 # The End
 
