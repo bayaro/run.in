@@ -62,7 +62,7 @@ fi
 verbose "Using profile '$PROFILE'"
 
 do_config() {
-    local conf=$(dirname "$0")/run.in.cfg
+    local conf=$(dirname $(realpath "$0"))/run.in.cfg
     if [ -e "$conf" ]; then
         verbose "Loading $conf ..."
         source "$conf"
