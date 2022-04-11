@@ -5,6 +5,7 @@ RUN_IN_PARALLEL=0
 SHOW_SUMMARY=0
 SYNCENV=0
 SSH=0
+PROXY_USE_BY_DEFAULT=0
 while true; do
     case "$1" in
         -y) YES=1
@@ -80,6 +81,9 @@ do_config() {
     fi
     SSH_PORT=${SSH_PORT:-"909"}
     PROXY_PORT=${PROXY_PORT:-"$SSH_PORT"}
+    if [ -z "$PROXY_HOST" ]; then
+        PROXY_USE_BY_DEFAULT=0
+    fi
 }
 do_config $PROFILE
 
@@ -219,7 +223,7 @@ process_host() {
     #    otherip=`echo $h | awk -F '##' '{print $3}'`
     #fi
 
-    USEPROXY=0
+    USEPROXY=$PROXY_USE_BY_DEFAULT
     while [ true ]; do
         #if [ $SYNCENV -gt 0 ] && [ $USEPROXY -eq 0 ]; then # always use proxy
         #    verbose $1 "Synchronizing there ..."

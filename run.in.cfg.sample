@@ -4,6 +4,9 @@
 PROXY_HOST=<ssh_jump_usr>@<ssh_jump_host>
 PROXY_PORT=22
 
+# connect through proxy if defined (do not try dirrect connect)
+PROXY_USE_BY_DEFAULT=0
+
 # self described
 SSH_USR=
 SSH_PORT=22
