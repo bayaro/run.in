@@ -42,13 +42,18 @@ HOSTS_LIST_CACHE="/tmp/$ME.cache"
 VERBOSE_PREFIX='===>'
 
 verbose() {
+    local color='1;33'
+    if echo "$1" | grep -q '^[01];[0-9]*$'; then
+        color=$1
+        shift
+    fi
     if [ -e "$1" ]; then
         TO="$1"
         shift
     else
         TO=/dev/stderr
     fi
-    echo -e "\e[0;33m$VERBOSE_PREFIX $@\e[0;0m" >> "$TO"
+    echo -e "\e[${color}m$VERBOSE_PREFIX $@\e[0;0m" >> "$TO"
 }
 
 if [ $SSH -eq 1 ] && ( [ $RUN_IN_PARALLEL -eq 1 ] || [ $SHOW_SUMMARY -eq 1 ] ); then
@@ -301,7 +306,7 @@ process_host() {
         ssh_cmd="ssh -p $SSH_PORT -o StrictHostKeyChecking=no -o ConnectTimeout=2 -qo PasswordAuthentication=no $SSH_USR$ip"
         if [ $SSH -eq 1 ]; then
             if [ $USEPROXY -eq 0 ]; then
-                $ssh_cmd 2>&1
+                eval $ssh_cmd 2>&1
             else
                 ssh -qA -tt -p $PROXY_PORT $PROXY_HOST $ssh_cmd
             fi
@@ -330,6 +335,7 @@ process_host() {
                 USEPROXY=1
                 continue
             fi
+            verbose '1;31' No direct connection to host
         else
             USEPROXY=0
         fi
@@ -346,7 +352,7 @@ process_host() {
         verbose "Continue? [y/N]"
         read y
         if [ "x$y" != "xy" ]; then
-            verbose "ABORTED"
+            verbose '1;31' "ABORTED"
             exit 1
         fi
         break
