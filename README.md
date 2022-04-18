@@ -17,6 +17,8 @@ __Example__:
 * The config file: _run.in.cfg.eu-west-1_
 * The soft link: _run.in.eu-west-1.sh_
 
+NB. All connect to remote hosts will be done _only_ with ssh key!!! 
+
 ### Options:
 - without options returns the list of hosts from a region
 - -g - regex pattern of host in the list
