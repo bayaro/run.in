@@ -32,6 +32,8 @@ __Example__:
 * process ansible inventory
 
 # Examples
+```
 run.in.eu-west-1.sh -g oracle -p sh -c 'uname -a ; uptime'
+```
 
 ### The End ;)
