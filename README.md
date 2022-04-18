@@ -22,6 +22,7 @@ __Example__:
 - -g - regex pattern of host in the list
 - -p - run in purallel
 - -ss - make summary of execution results
+- all other will be recognized as the script to run on remote hosts (if it is an exiting file the file will be copied and run)
 
 ### Misc:
 - -s - show list to do ssh to chosen host
