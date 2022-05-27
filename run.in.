@@ -318,7 +318,7 @@ process_host() {
             fi
         elif [ -n "$REMOTE_CMD" ]; then
             if [ $USEPROXY -eq 0 ]; then
-                eval "cat $REMOTE_CMD | $ssh_cmd 2>&1 'cat > ./remote_cmd && chmod u+x ./remote_cmd && ./remote_cmd ; RES=$?; rm ./remote_cmd; exit $RES'"
+                cat $REMOTE_CMD | eval "$ssh_cmd 2>&1 'cat > ./remote_cmd && chmod u+x ./remote_cmd && ./remote_cmd ; RES=$?; rm ./remote_cmd; exit $RES'"
             else
                 cat $REMOTE_CMD | ssh -qA -p $PROXY_PORT $PROXY_HOST 2>&1 \
                     "cat | $ssh_cmd 'cat > ./remote_cmd && chmod u+x ./remote_cmd && ./remote_cmd ; RES=\$?; rm ./remote_cmd ; exit \$RES'"
