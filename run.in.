@@ -91,6 +91,7 @@ do_config() {
     fi
 }
 do_config $PROFILE
+CONNECT_TIMEOUT=${CONNECT_TIMEOUT:-2}
 
 if [ ! -e "$HOSTS_LIST_CACHE" ] || [ $USE_HOSTS_LIST_CACHE -ne 1 ]; then
     verbose "Loading host list"
@@ -303,7 +304,7 @@ process_host() {
         #    rsync -a -e "ssh -A $PROXY_HOST ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2" ~/.bash_aws_history $SSH_USR$ip:.bash_history
         #    cd - > /dev/null
         #fi
-        ssh_cmd="ssh -p $SSH_PORT -o StrictHostKeyChecking=no -o ConnectTimeout=2 -qo PasswordAuthentication=no $SSH_USR$ip"
+        ssh_cmd="ssh -p $SSH_PORT -o StrictHostKeyChecking=no -o ConnectTimeout=$CONNECT_TIMEOUT -qo PasswordAuthentication=no $SSH_USR$ip"
         if [ $SSH -eq 1 ]; then
             if [ $USEPROXY -eq 0 ] || [ "x$PROXY_HOST" = "x$SSH_USR$ip" ]; then
                 eval $ssh_cmd 2>&1
