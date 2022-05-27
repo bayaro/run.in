@@ -305,7 +305,7 @@ process_host() {
         #fi
         ssh_cmd="ssh -p $SSH_PORT -o StrictHostKeyChecking=no -o ConnectTimeout=2 -qo PasswordAuthentication=no $SSH_USR$ip"
         if [ $SSH -eq 1 ]; then
-            if [ $USEPROXY -eq 0 ]; then
+            if [ $USEPROXY -eq 0 ] || [ "x$PROXY_HOST" = "x$SSH_USR$ip" ]; then
                 eval $ssh_cmd 2>&1
             else
                 ssh -qA -tt -p $PROXY_PORT $PROXY_HOST $ssh_cmd
@@ -317,7 +317,7 @@ process_host() {
             fi
         elif [ -n "$REMOTE_CMD" ]; then
             if [ $USEPROXY -eq 0 ]; then
-                cat $REMOTE_CMD | $ssh_cmd 2>&1 'cat > ./remote_cmd && chmod u+x ./remote_cmd && ./remote_cmd ; RES=$?; rm ./remote_cmd; exit $RES'
+                eval "cat $REMOTE_CMD | $ssh_cmd 2>&1 'cat > ./remote_cmd && chmod u+x ./remote_cmd && ./remote_cmd ; RES=$?; rm ./remote_cmd; exit $RES'"
             else
                 cat $REMOTE_CMD | ssh -qA -p $PROXY_PORT $PROXY_HOST 2>&1 \
                     "cat | $ssh_cmd 'cat > ./remote_cmd && chmod u+x ./remote_cmd && ./remote_cmd ; RES=\$?; rm ./remote_cmd ; exit \$RES'"
@@ -330,7 +330,7 @@ process_host() {
 
         #verbose $1 "ERROR: $RES"
         if [ $RES -eq 255 ] && [ $USEPROXY -eq 0 ]; then # 255 is code of no direct ssh
-            if [ -n "$PROXY_HOST" ]; then
+            if [ -n "$PROXY_HOST" ] && [ "x$PROXY_HOST" != "x$SSH_USR$ip"]; then
                 verbose $1 "Using proxy ..."
                 USEPROXY=1
                 continue
