@@ -15,6 +15,9 @@ while true; do
         -g) PATTERN=$2
             shift
             ;;
+        -w) PATTERN='\b'$2'\b'
+            shift
+            ;;
         -s) SSH=1
             if [ -z "$PATTERN" ]; then
                 PATTERN=$2
