@@ -19,10 +19,6 @@ while true; do
             shift
             ;;
         -s) SSH=1
-            if [ -z "$PATTERN" ]; then
-                PATTERN=$2
-                shift
-            fi
             ;;
         -r) SYNCENV=`echo "$SYNCENV + 1" | bc`
             ;;
@@ -186,7 +182,7 @@ get_item_from_list() {
         exit 1
     fi
     if [ $size -eq 1 ]; then
-        item="$list"
+        item=$(echo "$list" | sed -n 1p)
         return
     fi
 
@@ -208,7 +204,7 @@ get_item_from_list() {
         if [ $num -gt $size ]; then continue; fi
         break
     done
-    item=`echo "$list" | sed -n ${num}p`
+    item=$(echo "$list" | sed -n ${num}p)
 }
 
 HOSTS=$(
@@ -267,9 +263,10 @@ HOSTS=`echo "$HOSTS" | grep -v '##windows##'`
 
 if [ $SSH -eq 1 ]; then
     list=$(echo "$HOSTS" \
-        | awk -F '##' '{printf "%-14s %20s %s: %s (%s %s) %s ::%s\n",$3,$6,$1,$2,$4,$5,$7,$8}' | grep --color=always -E "$PATTERN|$")
+        | awk -F '##' '{printf "%-14s %20s %s: %s (%s %s) %s ::%s\n",$3,$6,$1,$2,$4,$5,$7,$8}' | grep -E "$PATTERN|$")
     get_item_from_list
-    HOSTS=$(echo "$HOSTS" | grep "\b$(echo $item | cut -d' ' -f1)\b")
+    echo
+    HOSTS=$(echo "$HOSTS" | grep -E "\b$(echo $item | cut -d' ' -f1)\b")
 fi
 
 HOSTTODOCOUNT=`echo "$HOSTS" | wc -l | awk '{print $1}'`
