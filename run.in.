@@ -155,6 +155,8 @@ parse_maestro() {
     host[name]=$desc
     host[platform]=$([ ${host[isWindows]:-"???"} = "false" ] && echo "-" || echo "windows")
     host[id]=${host[instanceId]:-"???"}
+    #local owner=${host[owner]}
+    #host[tags]="${host[tags]}, owner: $owner"
     printf "%s##%s##%s##%s##%s##%s##%s##%s\n" "${host[env]}" "${host[name]}" "${host[ip]}" "${host[state]}" "${host[platform]}" "${host[id]}" "${nif}" "${host[tags]}"
 }
 
