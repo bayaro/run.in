@@ -222,7 +222,8 @@ if [ -n "$PATTERN" ]; then
     fi
     HOSTS=$(echo "$HOSTS" | grep -E "$PATTERN")
     if [ -z "$HOSTS" ]; then
-        verbose "There are no hosts that contains '$PATTERN' in its description"
+        PATTERN=$(printf "$PATTERN" | tr -d "\b")
+        verbose "There are no hosts that contains \e[1;31m$PATTERN\e[1;33m in its description"
         exit 1
     fi
 fi
