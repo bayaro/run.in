@@ -20,6 +20,8 @@ while true; do
             ;;
         -s) SSH=1
             ;;
+        -j) SSH=1 JUST_SHOW_SSH=1
+            ;;
         -r) SYNCENV=`echo "$SYNCENV + 1" | bc`
             ;;
         -ss|-sum) SHOW_SUMMARY=1 YES=1
@@ -310,8 +312,16 @@ process_host() {
         ssh_cmd="ssh -p $SSH_PORT -o StrictHostKeyChecking=no -o ConnectTimeout=$CONNECT_TIMEOUT -qo PasswordAuthentication=no $SSH_USR$ip"
         if [ $SSH -eq 1 ]; then
             if [ $USEPROXY -eq 0 ] || [ "x$PROXY_HOST" = "x$SSH_USR$ip" ]; then
+                if [ -n "$JUST_SHOW_SSH" ]; then
+                    echo "$ssh_cmd"
+                    exit 0
+                fi
                 eval $ssh_cmd 2>&1
             else
+                if [ -n "$JUST_SHOW_SSH" ]; then
+                    echo "ssh -qA -tt -p $PROXY_PORT $PROXY_HOST $ssh_cmd"
+                    exit 0
+                fi
                 ssh -qA -tt -p $PROXY_PORT $PROXY_HOST $ssh_cmd
             fi
             RES=$?
