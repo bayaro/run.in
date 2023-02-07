@@ -1,5 +1,99 @@
 #!/bin/bash
 
+# -----=== FUNCTIONS ==========================================================
+verbose() {
+    local color='1;33'
+    if echo "$1" | grep -q '^[01];[0-9]*$'; then
+        color=$1
+        shift
+    fi
+    if [ -e "$1" ]; then
+        TO="$1"
+        shift
+    else
+        TO=/dev/stderr
+    fi
+    echo -e "\e[${color}m$VERBOSE_PREFIX $@\e[0;0m" >> "$TO"
+}
+
+ask() {
+    local opt=
+    if [ "$1" = 'noecho' ]; then
+        opt='-s'
+        shift
+    fi
+    local esc=$(printf '\033')
+    white="${esc}[1;37m"
+    printf "${white}===> $@${esc}[0m "
+    res=
+    read $opt res
+    if [ -n "$opt" ]; then
+        echo
+    fi
+}
+
+load_config() {
+    local conf=$(dirname $(realpath "$0"))/run.in.cfg
+    if [ -e "$conf" ]; then
+        verbose "Loading $conf ..."
+        source "$conf"
+    fi
+    while [ -n "$1" ]; do
+        conf=${conf}.${1}
+        shift
+        if [ -e "$conf" ]; then
+            verbose "Loading $conf ..."
+            source "$conf"
+        fi
+    done
+    if [ -n "$SSH_USR" ]; then
+        SSH_USR="${SSH_USR}@"
+    fi
+    SSH_PORT=${SSH_PORT:-"909"}
+    PROXY_PORT=${PROXY_PORT:-"$SSH_PORT"}
+    if [ -z "$PROXY_HOST" ]; then
+        PROXY_USE_BY_DEFAULT=0
+    fi
+}
+
+get_item_from_list() {
+    echo "$list" | awk '{print NR") "$0}'
+    size=$(expr `echo "$list" | wc -l` + 0)
+    if [ $size -eq 0 ]; then
+        alert "ERROR: Could not extract list from mirrros list"
+        exit 1
+    fi
+    if [ $size -eq 1 ]; then
+        item=$(echo "$list" | sed -n 1p)
+        return
+    fi
+
+    local num= suggest_num=
+    if [ -n "$1" ]; then
+        suggest_num=`echo "$list" | grep -n "$1" | head -n 1 | cut -f1 -d:`
+    fi
+    if [ -z "$suggest_num" ]; then suggest_num=1 ; fi
+    while true; do
+        ask "Enter the number from list ($suggest_num): "
+        num=$res
+        if [ -z "$num" ]; then num=$suggest_num; fi
+
+        set +e
+        echo "$num" | grep -q '^[0-9][0-9]*$'
+        res=$?
+        set -e
+        if [ $res -ne 0 ]; then continue; fi
+        if [ $num -gt $size ]; then continue; fi
+        break
+    done
+    item=$(echo "$list" | sed -n ${num}p)
+}
+
+# -----=== CODE ===============================================================
+ME=`basename $0`
+HOSTS_LIST_CACHE="/tmp/$ME.cache"
+VERBOSE_PREFIX='===>'
+
 USE_HOSTS_LIST_CACHE=1
 RUN_IN_PARALLEL=0
 SHOW_SUMMARY=0
@@ -38,25 +132,6 @@ while true; do
     shift
 done
 
-ME=`basename $0`
-HOSTS_LIST_CACHE="/tmp/$ME.cache"
-VERBOSE_PREFIX='===>'
-
-verbose() {
-    local color='1;33'
-    if echo "$1" | grep -q '^[01];[0-9]*$'; then
-        color=$1
-        shift
-    fi
-    if [ -e "$1" ]; then
-        TO="$1"
-        shift
-    else
-        TO=/dev/stderr
-    fi
-    echo -e "\e[${color}m$VERBOSE_PREFIX $@\e[0;0m" >> "$TO"
-}
-
 if [ $SSH -eq 1 ] && ( [ $RUN_IN_PARALLEL -eq 1 ] || [ $SHOW_SUMMARY -eq 1 ] ); then
     verbose "Could not ssh with RUN_IN_PARALLEL or SHOW_SUMMARY!!!!"
     exit 1
@@ -66,33 +141,12 @@ PROFILE=`echo "$ME" | sed -E 's/run.in.((.*).sh*)*$/\2/'`
 if [ -z "$PROFILE" ]; then
     PROFILE=default
 fi
-verbose "Using profile '$PROFILE'"
 
-do_config() {
-    local conf=$(dirname $(realpath "$0"))/run.in.cfg
-    if [ -e "$conf" ]; then
-        verbose "Loading $conf ..."
-        source "$conf"
-    fi
-    while [ -n "$1" ]; do
-        conf=${conf}.${1}
-        shift
-        if [ -e "$conf" ]; then
-            verbose "Loading $conf ..."
-            source "$conf"
-        fi
-    done
-    if [ -n "$SSH_USR" ]; then
-        SSH_USR="${SSH_USR}@"
-    fi
-    SSH_PORT=${SSH_PORT:-"909"}
-    PROXY_PORT=${PROXY_PORT:-"$SSH_PORT"}
-    if [ -z "$PROXY_HOST" ]; then
-        PROXY_USE_BY_DEFAULT=0
-    fi
-}
-do_config $PROFILE
+verbose "Using profile '$PROFILE'"
+load_config $PROFILE
 CONNECT_TIMEOUT=${CONNECT_TIMEOUT:-2}
+
+verbose "Load cloud specific code ..."
 . $(dirname $(realpath "$0"))/clouds/${CLOUD_TYPE}.sh
 
 if [ ! -e "$HOSTS_LIST_CACHE" ] || [ $USE_HOSTS_LIST_CACHE -ne 1 ]; then
@@ -109,55 +163,6 @@ echo "$HOSTS" > "$HOSTS_LIST_CACHE"
 
 HOSTS=$(echo "$HOSTS" | jq -rc 'to_entries | .[] | @sh "[\(.key)]=\(.value | tostring)"')
 eval "declare -A HOSTS=($HOSTS)"
-
-ask() {
-    local opt=
-    if [ "$1" = 'noecho' ]; then
-        opt='-s'
-        shift
-    fi
-    local esc=$(printf '\033')
-    white="${esc}[1;37m"
-    printf "${white}===> $@${esc}[0m "
-    res=
-    read $opt res
-    if [ -n "$opt" ]; then
-        echo
-    fi
-}
-
-get_item_from_list() {
-    echo "$list" | awk '{print NR") "$0}'
-    size=$(expr `echo "$list" | wc -l` + 0)
-    if [ $size -eq 0 ]; then
-        alert "ERROR: Could not extract list from mirrros list"
-        exit 1
-    fi
-    if [ $size -eq 1 ]; then
-        item=$(echo "$list" | sed -n 1p)
-        return
-    fi
-
-    local num= suggest_num=
-    if [ -n "$1" ]; then
-        suggest_num=`echo "$list" | grep -n "$1" | head -n 1 | cut -f1 -d:`
-    fi
-    if [ -z "$suggest_num" ]; then suggest_num=1 ; fi
-    while true; do
-        ask "Enter the number from list ($suggest_num): "
-        num=$res
-        if [ -z "$num" ]; then num=$suggest_num; fi
-
-        set +e
-        echo "$num" | grep -q '^[0-9][0-9]*$'
-        res=$?
-        set -e
-        if [ $res -ne 0 ]; then continue; fi
-        if [ $num -gt $size ]; then continue; fi
-        break
-    done
-    item=$(echo "$list" | sed -n ${num}p)
-}
 
 HOSTS=$(
 for host in "${HOSTS[@]}"; do
@@ -220,10 +225,6 @@ fi
 
 HOSTTODOCOUNT=`echo "$HOSTS" | wc -l | awk '{print $1}'`
 HOSTSEQNUM=0
-
-add_key() {
-    cat ~/.ssh/id_rsa.pub | ssh $host 'if [ ! -d .ssh ]; then mkdir .ssh; fi ; cat > ~/.ssh/authorized_keys'
-}
 
 process_host() {
     verbose $1 "--------------------------------------------------------------------------------"
@@ -314,9 +315,6 @@ process_host() {
             exit 1
         fi
         break
-        #if [ $? -ne 0 ]; then
-        #    add_key
-        #    ssh $ip $REMOTE_CMD
     done
 }
 
