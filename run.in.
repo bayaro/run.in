@@ -93,16 +93,11 @@ do_config() {
 }
 do_config $PROFILE
 CONNECT_TIMEOUT=${CONNECT_TIMEOUT:-2}
+. $(dirname $(realpath "$0"))/clouds/${CLOUD_TYPE}.sh
 
 if [ ! -e "$HOSTS_LIST_CACHE" ] || [ $USE_HOSTS_LIST_CACHE -ne 1 ]; then
     verbose "Loading host list"
-    if [ "x$CLOUD_TYPE" = "xmaestro" ]; then
-        HOSTS=$(or2-describe-instances -p "$MAESTRO_PROJECT" -r "$MAESTRO_REGION" --json --full)
-    else
-        HOSTS=$(aws --output json --profile $PROFILE ec2 describe-instances \
-            --query 'Reservations[*].Instances[*].{nif:NetworkInterfaces[*].PrivateIpAddresses[*].{public:Association.PublicIp,private:PrivateIpAddress},tags:Tags,state:State.Name,platform:Platform,id:InstanceId}')
-            #--instance-ids i-0f98c3e67f0f50bde \
-    fi
+    get_raw_hosts_list
 else
     verbose "Cached host list is using: [details: $(ls -l "$HOSTS_LIST_CACHE")]"
     HOSTS=`cat "$HOSTS_LIST_CACHE"`
@@ -114,53 +109,6 @@ echo "$HOSTS" > "$HOSTS_LIST_CACHE"
 
 HOSTS=$(echo "$HOSTS" | jq -rc 'to_entries | .[] | @sh "[\(.key)]=\(.value | tostring)"')
 eval "declare -A HOSTS=($HOSTS)"
-
-parse_aws() {
-    local host=$(echo "$1" | jq -rc '.[] | to_entries | .[] | @sh "[\(.key)]=\(.value | tostring)"')
-    eval "declare -A host=($host)"
-    local nif=${host[nif]}
-    nif=$(echo "$nif" | jq -rc '[.[][] | to_entries[]] | reduce .[] as $d (null; .[$d.key] += [$d.value])')
-    nif=$(echo "$nif" | jq -rc '(.public | tostring)+ "," + (.private | tostring) + ","' | tr -d '[]"' | sed -E 's/(null,|,+$)//g')
-    host[ip]=$(echo $nif | sed -E 's/^([^,$]*).*$/\1/g')
-    nif=$(echo $nif | sed -E -e 's/^([^,$]*)(.*)$/\2/g' -e 's/^,//')
-    local tags=${host[tags]}
-    tags=$(echo "$tags" | jq -rc '[.[] | .["key"] = .Key | .["value"] = .Value] | from_entries')
-    local names=$(echo "$tags" | jq -rc 'to_entries | .[] | @sh "[\(.key)]=\(.value | tostring)"')
-    tags=$(echo "$tags" \
-        | jq -rc '[to_entries[] | .["v"] = .key + "=" + (.value | tostring)] | reduce .[] as $d (null; .["xxx"] += [$d.v]) | .xxx' \
-        | tr -d '[]"'
-    )
-    host[tags]=$tags
-    eval "declare -A names=($names)"
-    host[name]=${names[Name]:-"???"}
-    host[env]=${names[Environment]:-"???"}
-    if [ "x${host[platform]}" = "xnull" ]; then
-        host[platform]="-"
-    fi
-    printf "%s##%s##%s##%s##%s##%s##%s##%s\n" ${host[env]} ${host[name]} ${host[ip]} ${host[state]} ${host[platform]} ${host[id]} ${nif} ${host[tags]}
-}
-
-parse_maestro() {
-    local host=$(echo "$1" | jq -rc 'to_entries | .[] | @sh "[\(.key)]=\(.value | tostring)"')
-    eval "declare -A host=($host)"
-    # {"memory":"15360","privateIp":"10.24.21.14","dnsName":"example.com","description":"super jet","project":"SUPER-PRJ","networks":"fe772f49-8ad9-4b32-addf-ce47446b5038","instanceId":"fkrdr5ter345","vlan":"Server Network","schedules":"ua_db_start,ua_stop","isWindows":"false","state":"running","sshKeySet":"false","locked":"false","owner":"Maestro","image":"Linux8_64-bit","shape":"3XL.40","cpu":"8","tags":"cron:start=ua-db, cron:stop=ua","guestOS":"Linux 8 64-bit","requested":"2022-03-02T05:01:57+00:00","region":"PRG-US7","isExposed":"false","registerOnLuminate":"false","properties":"description=foo","buildImageDate":"01/06/2022"}
-    local nif=${host[publicIp]:-"null"},${host[privateIp]:-"null"}
-    nif=$(echo "$nif" | sed -E 's/(null,|,+$)//g')
-    host[ip]=$(echo $nif | sed -E 's/^([^,$]*).*$/\1/g')
-    nif=$(echo $nif | sed -E 's/^([^,$]*)(.*)$/\2/g')
-    local desc=${host[description]:-"???"}
-    host[env]="???"
-    if echo "$desc" | grep -q '^env:' ; then
-        host[env]=$(echo "$desc" | sed -E 's/^env:([^ ]*) .*/\1/')
-        desc=$(echo "$desc" | sed -E 's/^env:[^ ]* (.*)/\1/')
-    fi
-    host[name]=$desc
-    host[platform]=$([ ${host[isWindows]:-"???"} = "false" ] && echo "-" || echo "windows")
-    host[id]=${host[instanceId]:-"???"}
-    #local owner=${host[owner]}
-    #host[tags]="${host[tags]}, owner: $owner"
-    printf "%s##%s##%s##%s##%s##%s##%s##%s\n" "${host[env]}" "${host[name]}" "${host[ip]}" "${host[state]}" "${host[platform]}" "${host[id]}" "${nif}" "${host[tags]}"
-}
 
 ask() {
     local opt=
@@ -213,11 +161,7 @@ get_item_from_list() {
 
 HOSTS=$(
 for host in "${HOSTS[@]}"; do
-    if [ "x$CLOUD_TYPE" = "xmaestro" ]; then
-        parse_maestro "$host"
-    else
-        parse_aws "$host"
-    fi
+    parse_host_from_raw_list "$host"
 done)
 
 if [ -n "$PATTERN" ]; then
