@@ -102,7 +102,6 @@ VERBOSE_PREFIX='===>'
 USE_HOSTS_LIST_CACHE=1
 RUN_IN_PARALLEL=0
 SHOW_SUMMARY=0
-SYNCENV=0
 SSH=0
 PROXY_USE_BY_DEFAULT=0
 while true; do
@@ -120,8 +119,6 @@ while true; do
         -s) SSH=1
             ;;
         -j) SSH=1 JUST_SHOW_SSH=1
-            ;;
-        -r) SYNCENV=`echo "$SYNCENV + 1" | bc`
             ;;
         -ss|-sum) SHOW_SUMMARY=1 YES=1
             ;;
@@ -205,7 +202,7 @@ else
     fi
 fi
 
-if [ -z "$REMOTE_CMD" ] && [ $SYNCENV -eq 0 ]; then
+if [ -z "$REMOTE_CMD" ]; then
     list=$(echo "$HOSTS" \
         | awk -F '##' '{printf "===> %-14s %20s %s: %s (%s %s) %s ::%s\n",$3,$6,$1,$2,$4,$5,$7,$8}' | grep --color=always -E "$PATTERN|$")
     echo "$list"
@@ -253,13 +250,6 @@ process_host() {
 
     USEPROXY=$PROXY_USE_BY_DEFAULT
     while [ true ]; do
-        #if [ $SYNCENV -gt 0 ] && [ $USEPROXY -eq 0 ]; then # always use proxy
-        #    verbose $1 "Synchronizing there ..."
-        #    cd ~/bin
-        #    rsync -a -e "ssh -A $PROXY_HOST ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2" .bashrc .bash_profile .bash_completion vim/.vimrc $SSH_USR$ip:
-        #    rsync -a -e "ssh -A $PROXY_HOST ssh -o StrictHostKeyChecking=no -o ConnectTimeout=2" ~/.bash_aws_history $SSH_USR$ip:.bash_history
-        #    cd - > /dev/null
-        #fi
         ssh_cmd="ssh -p $SSH_PORT -o StrictHostKeyChecking=no -o ConnectTimeout=$CONNECT_TIMEOUT -qo PasswordAuthentication=no $SSH_USR$ip"
         if [ $SSH -eq 1 ]; then
             if [ $USEPROXY -eq 0 ] || [ "x$PROXY_HOST" = "x$SSH_USR$ip" ]; then
@@ -276,10 +266,6 @@ process_host() {
                 ssh -qA -tt -p $PROXY_PORT $PROXY_HOST $ssh_cmd
             fi
             RES=$?
-            if [ $RES -eq 0 ] && [ $SYNCENV -gt 1 ]; then
-                verbose $1 "Synchronizing here ..."
-                rsync -a -e "ssh -A -p $PROXY_PORT $PROXY_HOST ssh -o StrictHostKeyChecking=no" $SSH_USR$ip:.bash_history ~/.bash_aws_history
-            fi
         elif [ -n "$REMOTE_CMD" ]; then
             if [ $USEPROXY -eq 0 ]; then
                 cat $REMOTE_CMD | eval "$ssh_cmd 2>&1 'cat > ./remote_cmd && chmod u+x ./remote_cmd && ./remote_cmd ; RES=$?; rm ./remote_cmd; exit $RES'"
