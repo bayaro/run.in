@@ -236,9 +236,15 @@ process_host() {
             '{printf "(%02d/%d) %-14s %20s %s: %s (%s %s) %s ::%s\n",HSN,HTDC,$3,$6,$1,$2,$4,$5,$7,$8}' \
         | grep --color=always -E "$PATTERN")"
     local state=`echo $h | awk -F '##' '{print $4}'`
-    if [ "$state" != "running" ]; then return; fi
+    if [ "$state" != "running" ]; then
+        verbose '1;31' "Host is not running"
+        return
+    fi
     local platform=`echo $h | awk -F '##' '{print $5}'`
-    if [ "$platform" != "-" ]; then return; fi
+    if [ "$platform" != "-" ]; then
+        verbose '1;31' "Host is running on an unknown platform ($platform)"
+        return
+    fi
 
     env=`echo $h | awk -F '##' '{print $1}'`
     name=`echo $h | awk -F '##' '{print $2}'`
@@ -248,11 +254,15 @@ process_host() {
     #    otherip=`echo $h | awk -F '##' '{print $3}'`
     #fi
 
-    USEPROXY=$PROXY_USE_BY_DEFAULT
+    USE_PROXY=$PROXY_USE_BY_DEFAULT
     while [ true ]; do
-        ssh_cmd="ssh -p $SSH_PORT -o StrictHostKeyChecking=no -o ConnectTimeout=$CONNECT_TIMEOUT -qo PasswordAuthentication=no $SSH_USR$ip"
+        local identity=
+        if [ -n "$SSH_IDENTITY" ]; then
+            identity=" -i '$SSH_IDENTITY'"
+        fi
+        ssh_cmd="ssh -p $SSH_PORT $identity -o StrictHostKeyChecking=no -o ConnectTimeout=$CONNECT_TIMEOUT -qo PasswordAuthentication=no $SSH_USR$ip"
         if [ $SSH -eq 1 ]; then
-            if [ $USEPROXY -eq 0 ] || [ "x$PROXY_HOST" = "x$SSH_USR$ip" ]; then
+            if [ $USE_PROXY -eq 0 ] || [ "x$PROXY_HOST" = "x$SSH_USR$ip" ]; then
                 if [ -n "$JUST_SHOW_SSH" ]; then
                     echo "$ssh_cmd"
                     exit 0
@@ -260,17 +270,17 @@ process_host() {
                 eval $ssh_cmd 2>&1
             else
                 if [ -n "$JUST_SHOW_SSH" ]; then
-                    echo "ssh -qA -tt -p $PROXY_PORT $PROXY_HOST $ssh_cmd"
+                    echo "ssh -qA -tt -p $PROXY_PORT $PROXY_IDENTITY $PROXY_HOST $ssh_cmd"
                     exit 0
                 fi
-                ssh -qA -tt -p $PROXY_PORT $PROXY_HOST $ssh_cmd
+                ssh -qA -tt -p $PROXY_PORT $PROXY_IDENTITY $PROXY_HOST $ssh_cmd
             fi
             RES=$?
         elif [ -n "$REMOTE_CMD" ]; then
-            if [ $USEPROXY -eq 0 ]; then
+            if [ $USE_PROXY -eq 0 ]; then
                 cat $REMOTE_CMD | eval "$ssh_cmd 2>&1 'cat > ./remote_cmd && chmod u+x ./remote_cmd && ./remote_cmd ; RES=$?; rm ./remote_cmd; exit $RES'"
             else
-                cat $REMOTE_CMD | ssh -qA -p $PROXY_PORT $PROXY_HOST 2>&1 \
+                cat $REMOTE_CMD | ssh -qA -p $PROXY_PORT $PROXY_IDENTITY $PROXY_HOST 2>&1 \
                     "cat | $ssh_cmd 'cat > ./remote_cmd && chmod u+x ./remote_cmd && ./remote_cmd ; RES=\$?; rm ./remote_cmd ; exit \$RES'"
             fi
             RES=$?
@@ -280,15 +290,15 @@ process_host() {
         if [ $RES -eq 0 ]; then break; fi
 
         #verbose $1 "ERROR: $RES"
-        if [ $RES -eq 255 ] && [ $USEPROXY -eq 0 ]; then # 255 is code of no direct ssh
-            if [ -n "$PROXY_HOST" ] && [ "x$PROXY_HOST" != "x$SSH_USR$ip"]; then
+        if [ $RES -eq 255 ] && [ $USE_PROXY -eq 0 ]; then # 255 is code of no direct ssh
+            if [ -n "$PROXY_HOST" ] && [ "x$PROXY_HOST" != "x$SSH_USR$ip" ]; then
                 verbose $1 "Using proxy ..."
-                USEPROXY=1
+                USE_PROXY=1
                 continue
             fi
             verbose '1;31' No direct connection to host
         else
-            USEPROXY=0
+            USE_PROXY=0
         fi
         if [ "x$otherip" != "x" ]; then
             ip=`echo "$otherip" | awk -F ',' '{print $1}'`
