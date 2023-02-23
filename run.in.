@@ -51,9 +51,6 @@ load_config() {
             source "$conf"
         fi
     done
-    if [ -n "$SSH_USR" ]; then
-        SSH_USR="${SSH_USR}@"
-    fi
     SSH_PORT=${SSH_PORT:-"909"}
     PROXY_PORT=${PROXY_PORT:-"$SSH_PORT"}
     if [ -z "$PROXY_HOST" ]; then
@@ -257,6 +254,17 @@ process_host() {
     env=`echo $h | awk -F '##' '{print $1}'`
     name=`echo $h | awk -F '##' '{print $2}'`
     otherip=`echo $h | awk -F '##' '{print $7}'`
+    tags=$(echo $h | awk -F '##' '{print $8}')
+    ssh_user=$SSH_USR
+    if echo "$tags" | grep -q 'ansible_ssh_user' ; then
+        custom_ssh_user=$(echo "$tags" | sed -E 's/^.*ansible_ssh_user=([^, ]*).*$/\1/')
+        ssh_user=$custom_ssh_user
+    fi
+    if [ -n "$ssh_user" ]; then
+        ssh_dest="${ssh_user}@${ip}"
+    else
+        ssh_dest=$ip
+    fi
     #if [ "x$otherip" != "x" ]; then
     #    ip=$otherip
     #    otherip=`echo $h | awk -F '##' '{print $3}'`
@@ -272,19 +280,21 @@ process_host() {
         if [ -n "$PROXY_IDENTITY" ]; then
             pdk=-i
         fi
-        ssh_cmd="ssh -p $SSH_PORT $identity -o StrictHostKeyChecking=no -o ConnectTimeout=$CONNECT_TIMEOUT -qo PasswordAuthentication=no $SSH_USR$ip"
+        ssh_cmd="ssh -p $SSH_PORT $identity -o StrictHostKeyChecking=no -o ConnectTimeout=$CONNECT_TIMEOUT -qo PasswordAuthentication=no $ssh_dest"
         if [ $SSH -eq 1 ]; then
-            if [ $USE_PROXY -eq 0 ] || [ "x$PROXY_HOST" = "x$SSH_USR$ip" ]; then
+            if [ $USE_PROXY -eq 0 ] || [ "x$PROXY_HOST" = "x$ssh_dest" ]; then
                 if [ -n "$JUST_SHOW_SSH" ]; then
                     echo "$ssh_cmd"
                     exit 0
                 fi
+                echo "$ssh_cmd"
                 eval $ssh_cmd 2>&1
             else
                 if [ -n "$JUST_SHOW_SSH" ]; then
                     echo "ssh -qA -tt -p $PROXY_PORT $pdk $PROXY_IDENTITY $PROXY_HOST $ssh_cmd"
                     exit 0
                 fi
+                echo "ssh -A -tt -p $PROXY_PORT $pdk $PROXY_IDENTITY $PROXY_HOST $ssh_cmd"
                 ssh -qA -tt -p $PROXY_PORT $pdk $PROXY_IDENTITY $PROXY_HOST $ssh_cmd
             fi
             RES=$?
@@ -303,7 +313,7 @@ process_host() {
 
         #verbose $1 "ERROR: $RES"
         if [ $RES -eq 255 ] && [ $USE_PROXY -eq 0 ]; then # 255 is code of no direct ssh
-            if [ -n "$PROXY_HOST" ] && [ "x$PROXY_HOST" != "x$SSH_USR$ip" ]; then
+            if [ -n "$PROXY_HOST" ] && [ "x$PROXY_HOST" != "x$ssh_dest" ]; then
                 verbose $1 "Using proxy ..."
                 USE_PROXY=1
                 continue
