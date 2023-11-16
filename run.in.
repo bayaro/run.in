@@ -95,6 +95,8 @@ get_item_from_list() {
 ME=`basename $0`
 HOSTS_LIST_CACHE="/tmp/$ME.cache"
 VERBOSE_PREFIX='===>'
+HOST_LIST_FMT='%-14s %20s %s: %s (%s %s) %s ::%s\n'
+HOST_ITEMS_IN_LIST='$3,$6,$1,$2,$4,$5,$7,$8'
 
 USE_HOSTS_LIST_CACHE=1
 RUN_IN_PARALLEL=0
@@ -177,11 +179,12 @@ if [ -n "$PATTERN" ]; then
     HOSTS=$(echo "$HOSTS" | grep -E "$PATTERN")
     if [ -z "$HOSTS" ]; then
         PATTERN=$(printf "$PATTERN" | tr -d "\b")
-        err "There are no hosts that contains \e[1;31m$PATTERN\e[1;33m in its description"
+        err "There are no hosts that contains '$PATTERN' in its description"
     fi
 fi
 
 HOSTS=$(echo "$HOSTS" | sort -g)
+#echo "$HOSTS" # debug
 
 if [ $SSH -eq 1 ]; then
     REMOTE_CMD=ssh # just to inform on beggining
@@ -189,9 +192,7 @@ else
     REMOTE_CMD="$@"
 fi
 
-if [ -z "$REMOTE_CMD" ]; then
-    USE_HOSTS_LIST_CACHE=0;
-else
+if [ -n "$REMOTE_CMD" ]; then
     verbose ">>>>>> $REMOTE_CMD"
     if [ ! -e "$REMOTE_CMD" ]; then
         echo "$REMOTE_CMD" > /tmp/remote_cmd
@@ -200,10 +201,10 @@ else
 fi
 
 if [ -z "$REMOTE_CMD" ]; then
-    list=$(echo "$HOSTS" \
-        | awk -F '##' '{printf "===> %-14s %20s %s: %s (%s %s) %s ::%s\n",$3,$6,$1,$2,$4,$5,$7,$8}' | grep --color=always -E "$PATTERN|$")
+    list=$(echo "$HOSTS" | awk -F '##' "{printf \"===> ${HOST_LIST_FMT}\",${HOST_ITEMS_IN_LIST}}" \
+        | grep --color=always -E "$PATTERN|$")
     echo "$list"
-    verbose "`echo "$list" | wc -l` hosts found"
+    verbose "$(echo "$list" | wc -l) hosts found"
     exit 0
 fi
 
@@ -213,35 +214,36 @@ if [ $? -ne 0 ]; then
     verbose "Please run: eval \$(ssh-agent | grep ^SSH)"
 fi
 
-HOSTS=`echo "$HOSTS" | grep -v '##windows##'`
+HOSTS=$(echo "$HOSTS" | grep -v '##windows##')
 
 if [ $SSH -eq 1 ]; then
-    list=$(echo "$HOSTS" \
-        | awk -F '##' '{printf "%-14s %20s %s: %s (%s %s) %s ::%s\n",$3,$6,$1,$2,$4,$5,$7,$8}' | grep -E "$PATTERN|$")
+    list=$(echo "$HOSTS" | awk -F '##' "{printf \"${HOST_LIST_FMT}\",${HOST_ITEMS_IN_LIST}}" \
+        | grep --color=always -E "$PATTERN|$")
     get_item_from_list
     echo
     __ip=$(echo $item | cut -d' ' -f1)
     if [ "$__ip" == "null" ]; then
         __ip=$(echo $item | cut -d' ' -f2) # host id
     fi
+    __ip=$(echo "$__ip" | sed -e 's/\x1B\[[0-9;]\{1,\}[A-Za-z]//g' -e 's/\x1B\[K//g') # ansi colors removed
     HOSTS=$(echo "$HOSTS" | grep -E "\b${__ip}\b")
 fi
 
-HOSTTODOCOUNT=`echo "$HOSTS" | wc -l | awk '{print $1}'`
-HOSTSEQNUM=0
+hosts_todo_count=$(echo "$HOSTS" | wc -l | awk '{print $1}')
+host_seq_num=0
 
 process_host() {
     verbose $1 "--------------------------------------------------------------------------------"
-    verbose $1 "$(echo $h \
-        | awk -F '##' -v HSN=$HOSTSEQNUM -v HTDC=$HOSTTODOCOUNT \
-            '{printf "(%02d/%d) %-14s %20s %s: %s (%s %s) %s ::%s\n",HSN,HTDC,$3,$6,$1,$2,$4,$5,$7,$8}' \
+    verbose '0;32' $1 "$(echo $h \
+        | awk -F '##' -v HSN=$host_seq_num -v HTDC=$hosts_todo_count \
+            "{printf \"(%02d/%d) ${HOST_LIST_FMT}\",HSN,HTDC,${HOST_ITEMS_IN_LIST}}" \
         | grep --color=always -E "$PATTERN")"
-    local state=`echo $h | awk -F '##' '{print $4}'`
+    local state=$(echo $h | awk -F '##' '{print $4}')
     if [ "$state" != "running" ]; then
         verbose '1;31' "Host is not running"
         return
     fi
-    local platform=`echo $h | awk -F '##' '{print $5}'`
+    local platform=$(echo $h | awk -F '##' '{print $5}')
     if [ "$platform" != "-" ]; then
         verbose '1;31' "Host is running on an unknown platform ($platform)"
         return
@@ -365,9 +367,9 @@ IFS='
 '
 RUNINPAR=0 WAITFOR=
 for h in $HOSTS; do
-    HOSTSEQNUM=`echo "$HOSTSEQNUM + 1" | bc`
-    ip=`echo $h | awk -F '##' '{print $3}'`
-    LF=`printf "$LOGDIR/%02d-$ip" $HOSTSEQNUM`
+    host_seq_num=$(echo "$host_seq_num + 1" | bc)
+    ip=$(echo $h | awk -F '##' '{print $3}')
+    LF=$(printf "$LOGDIR/%02d-$ip" $host_seq_num)
     touch "$LF"
 
     if [ $RUN_IN_PARALLEL -ne 1 ]; then
@@ -462,7 +464,7 @@ fi
 if [ "x$SHOW_SUMMARY" = "x1" ]; then
     SUMMARY=`echo "$SUMMARY" | sort -rn`
     echo
-    printf -- "------ SUMMARY of %3d hosts -------------\n" $HOSTTODOCOUNT
+    printf -- "------ SUMMARY of %3d hosts -------------\n" $hosts_todo_count
     echo "$SUMMARY"
     echo     "------ SUMMARY END ----------------------"
 fi
